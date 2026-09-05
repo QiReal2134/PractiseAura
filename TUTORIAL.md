@@ -20,7 +20,7 @@
 
 **开服**：双击 `run\start-server.cmd`，看到 `[PractiseAura] PractiseAura 已启用！` 即成功。
 
-**连接**：本机 `localhost`；局域网 `你的IP:25565`（连不上就开防火墙 25575/25565）。
+**连接**：本机 `localhost`；局域网 `你的IP:25565`（连不上就开防火墙 25565；RCON 端口 25575 仅限本机使用，勿对外开放）。
 
 **1.8.9 客户端**：`plugins/` 放 ViaVersion + ViaBackwards + ViaRewind 三个插件，服务端保持 26.2。
 
