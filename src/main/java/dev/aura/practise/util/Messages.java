@@ -24,8 +24,11 @@ public class Messages {
         this.plugin = plugin;
     }
 
+    /** 内置默认表只构建一次（类加载时），缓存 miss 回退不至于每次重建 180+ 项 */
+    private static final Map<String, String> DEFAULTS = buildDefaults();
+
     /** 默认消息（键 → 文本）。修改默认文案改这里。 */
-    private static Map<String, String> defaults() {
+    private static Map<String, String> buildDefaults() {
         Map<String, String> d = new LinkedHashMap<>();
         d.put("prefix", "&8[&bAura&8] ");
         d.put("help.header", "&b--- PractiseAura ---");
@@ -258,7 +261,7 @@ public class Messages {
         }
         // 合并：插件升级新增的键补进文件（不覆盖用户已改内容）
         boolean changed = false;
-        for (Map.Entry<String, String> entry : defaults().entrySet()) {
+        for (Map.Entry<String, String> entry : DEFAULTS.entrySet()) {
             if (!cache.containsKey(entry.getKey())) {
                 cache.put(entry.getKey(), entry.getValue());
                 changed = true;
@@ -269,7 +272,7 @@ public class Messages {
 
     public synchronized void save() {
         YamlConfiguration cfg = new YamlConfiguration();
-        cfg.set("prefix", cache.getOrDefault("prefix", defaults().get("prefix")));
+        cfg.set("prefix", cache.getOrDefault("prefix", DEFAULTS.get("prefix")));
         for (Map.Entry<String, String> entry : cache.entrySet()) {
             if (entry.getKey().equals("prefix")) continue;
             cfg.set("messages." + entry.getKey(), entry.getValue());
@@ -283,7 +286,7 @@ public class Messages {
     }
 
     private void writeDefaults() {
-        cache.putAll(defaults());
+        cache.putAll(DEFAULTS);
         save();
     }
 
@@ -291,7 +294,7 @@ public class Messages {
     public String get(String key) {
         String value = cache.get(key);
         if (value != null) return value;
-        return defaults().getOrDefault(key, key);
+        return DEFAULTS.getOrDefault(key, key);
     }
 
     /** 取原始文本（不套占位符），供 BossBar 等旧式 API 使用 */

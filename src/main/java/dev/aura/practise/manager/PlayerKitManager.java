@@ -46,14 +46,15 @@ public class PlayerKitManager {
         }
     }
 
-    /** 该玩家在该模式的个人 kit（没有返回 null，则按模式 kit/默认发放） */
+    /** 该玩家在该模式的个人 kit 深拷贝（没有则返回 null，按模式 kit/默认发放） */
     public KitManager.Kit get(UUID playerId, String modeId) {
         Map<String, KitManager.Kit> byMode = kits.get(playerId);
-        return byMode == null ? null : byMode.get(modeId.toLowerCase());
+        KitManager.Kit kit = byMode == null ? null : byMode.get(modeId.toLowerCase());
+        return kit == null ? null : KitManager.copy(kit);
     }
 
     public void record(UUID playerId, String modeId, KitManager.Kit kit) {
-        kits.computeIfAbsent(playerId, k -> new HashMap<>()).put(modeId.toLowerCase(), kit);
+        kits.computeIfAbsent(playerId, k -> new HashMap<>()).put(modeId.toLowerCase(), KitManager.copy(kit));
         save();
     }
 

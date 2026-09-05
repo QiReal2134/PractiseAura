@@ -92,7 +92,7 @@ public class GameListener implements Listener {
         plugin.boards().remove(p);
         plugin.pendingBeds().remove(p.getUniqueId());
         plugin.pendingSettings().remove(p.getUniqueId());
-        plugin.lobbyMenu().lastGame().remove(p.getUniqueId());
+        plugin.lobbyMenu().forgetLastGame(p.getUniqueId());
         plugin.duelInvites().remove(p.getUniqueId()); // 以该玩家为目标的约战邀请
         plugin.duelCooldowns().remove(p.getUniqueId());
     }
@@ -472,7 +472,7 @@ public class GameListener implements Listener {
                     if (plugin.games().gameOf(p.getUniqueId()) == null) plugin.lobbyMenu().open(p);
                 }
                 case "rejoin" -> {
-                    ModeHandler last = plugin.lobbyMenu().lastGame().get(p.getUniqueId());
+                    ModeHandler last = plugin.lobbyMenu().lastGameOf(p.getUniqueId());
                     if (last != null && plugin.games().gameOf(p.getUniqueId()) == null) {
                         plugin.games().join(p, last);
                     }

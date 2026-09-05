@@ -207,7 +207,8 @@ public class WorldCommand implements CommandExecutor, TabCompleter {
             Msg.send(sender, "world.delete-usage");
             return;
         }
-        if (Bukkit.getWorld(args[1]) == null) {
+        // 已登记但未加载的世界也要放行：deleteWorldFiles 会清理 worlds.yml 登记和残留文件夹
+        if (Bukkit.getWorld(args[1]) == null && !isRegistered(plugin, args[1])) {
             Msg.send(sender, "world.missing", "name", args[1]);
             return;
         }
@@ -218,10 +219,17 @@ public class WorldCommand implements CommandExecutor, TabCompleter {
     public static void deleteWorldFiles(PractiseAuraPlugin plugin, CommandSender sender, String worldName) {
         World world = Bukkit.getWorld(worldName);
         if (world == null) {
-            // 世界未加载但文件夹可能还在：直接删文件夹
-            Path folder = new java.io.File(plugin.getDataFolder().getParentFile().getParentFile(), worldName)
-                    .toPath();
-            deleteFolder(folder);
+            // 世界未加载：只清理 worlds.yml 登记过的自定义世界，防止按裸名误删服务器目录下的任意文件夹
+            if (!isRegistered(plugin, worldName)) {
+                Msg.send(sender, "world.missing", "name", worldName);
+                return;
+            }
+            // 文件夹可能从未落盘（虚空世界空区块不保存）或有残留，删得掉多少算多少
+            String error = deleteFolder(Bukkit.getWorldContainer().toPath().resolve(worldName));
+            if (error != null) {
+                Msg.send(sender, "world.delete-folder-fail", "error", error);
+                return; // 保留登记，文件夹还在时可重试
+            }
             unregister(plugin, worldName);
             Msg.send(sender, "world.deleted", "name", worldName);
             return;
@@ -244,24 +252,35 @@ public class WorldCommand implements CommandExecutor, TabCompleter {
             Msg.send(sender, "world.delete-fail");
             return;
         }
-        deleteFolder(folder);
+        String error = deleteFolder(folder);
+        if (error != null) {
+            Msg.send(sender, "world.delete-folder-fail", "error", error);
+            return; // 保留登记：文件夹还在，重启会重新加载，可重试删除
+        }
         unregister(plugin, worldName); // 同步移除 worlds.yml 登记，避免重启后重新加载已删除的世界
         Msg.send(sender, "world.deleted", "name", worldName);
     }
 
-    private static void deleteFolder(Path folder) {
+    /** 递归删除文件夹；返回 null 表示彻底删除（或本来就不存在），否则为首个失败原因 */
+    private static String deleteFolder(Path folder) {
+        if (!Files.exists(folder)) return null;
+        List<Path> paths;
         try {
-            if (!java.nio.file.Files.exists(folder)) return;
-            Files.walk(folder)
-                    .sorted(Comparator.reverseOrder())
-                    .forEach(path -> {
-                        try {
-                            Files.delete(path);
-                        } catch (IOException ignored) {
-                        }
-                    });
-        } catch (IOException ignored) {
+            try (var stream = Files.walk(folder)) {
+                paths = stream.sorted(Comparator.reverseOrder()).toList();
+            }
+        } catch (Exception ex) {
+            return ex.toString();
         }
+        String firstError = null;
+        for (Path path : paths) {
+            try {
+                Files.delete(path);
+            } catch (IOException ex) {
+                if (firstError == null) firstError = ex.toString();
+            }
+        }
+        return firstError;
     }
 
     /** 世界是否登记在 worlds.yml 中（即由 /world create 创建的自定义世界） */

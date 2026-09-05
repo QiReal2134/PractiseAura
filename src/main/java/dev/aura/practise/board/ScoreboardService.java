@@ -43,20 +43,23 @@ public class ScoreboardService {
     }
 
     public void updateGame(Game game) {
-        for (Player p : Bukkit.getOnlinePlayers()) {
-            UUID id = p.getUniqueId();
-            if ((game.isParticipant(id) || game.isSpectator(id)) && boards.containsKey(id)) {
-                render(p, game.scoreboardLinesFor(p));
-            }
+        // 只遍历本局观众（参与者+观战者），不去全服扫描；行内容按查看者构建（含个人击杀数）
+        for (UUID id : game.scoreboardViewers()) {
+            if (!boards.containsKey(id)) continue;
+            Player p = Bukkit.getPlayer(id);
+            if (p != null) render(p, game.scoreboardLinesFor(p));
         }
     }
 
-    /** 每 2 秒刷新一次大厅记分板 */
+    /** 每 2 秒刷新一次大厅记分板；大厅行内容与查看者无关，整个扫描轮只构建一次 */
     public void refreshLobbyBoards() {
+        List<String> lines = null;
         for (Player p : Bukkit.getOnlinePlayers()) {
-            if (plugin.games().gameOf(p.getUniqueId()) == null && boards.containsKey(p.getUniqueId())) {
-                render(p, lobbyLines());
+            if (plugin.games().gameOf(p.getUniqueId()) != null || !boards.containsKey(p.getUniqueId())) {
+                continue;
             }
+            if (lines == null) lines = lobbyLines();
+            render(p, lines);
         }
     }
 

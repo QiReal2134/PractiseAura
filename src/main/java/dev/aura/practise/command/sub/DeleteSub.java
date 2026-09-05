@@ -6,6 +6,7 @@ import java.util.List;
 import dev.aura.practise.PractiseAuraPlugin;
 import dev.aura.practise.command.CmdUtil;
 import dev.aura.practise.command.SubCommand;
+import dev.aura.practise.command.WorldCommand;
 import dev.aura.practise.game.Arena;
 import dev.aura.practise.util.Msg;
 import org.bukkit.command.CommandSender;
@@ -51,13 +52,12 @@ public class DeleteSub implements SubCommand {
         }
         // 记录地图世界：删除后若该世界不再被任何场使用且是登记的自定义世界，一并真实删除
         String worldName = arena.worldName();
-        boolean worldRegistered = worldName != null
-                && dev.aura.practise.command.WorldCommand.isRegistered(plugin, worldName);
+        boolean worldRegistered = worldName != null && WorldCommand.isRegistered(plugin, worldName);
         plugin.arenas().delete(args[1]);
         Msg.send(sender, "delete.success", "name", args[1]);
         if (worldRegistered && plugin.arenas().all().stream()
                 .noneMatch(a -> worldName.equals(a.worldName()))) {
-            dev.aura.practise.command.WorldCommand.deleteWorldFiles(plugin, sender, worldName);
+            WorldCommand.deleteWorldFiles(plugin, sender, worldName);
         }
     }
 

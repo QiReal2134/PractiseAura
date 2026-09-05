@@ -93,8 +93,10 @@ public class KitManager {
         return kits.containsKey(modeId.toLowerCase());
     }
 
+    /** 返回 kit 深拷贝，缓存不外泄（该模式没有 kit 返回 null） */
     public Kit get(String modeId) {
-        return kits.get(modeId.toLowerCase());
+        Kit kit = kits.get(modeId.toLowerCase());
+        return kit == null ? null : copy(kit);
     }
 
     public void set(String modeId, Kit kit) {
@@ -102,8 +104,8 @@ public class KitManager {
         save();
     }
 
-    /** 深拷贝：缓存里的 ItemStack 不能共享调用方的引用（背包里的物品被消耗会污染 kit） */
-    private static Kit copy(Kit kit) {
+    /** 深拷贝：缓存里的 ItemStack 不能共享调用方的引用（背包里的物品被消耗会污染 kit）——PlayerKitManager 复用 */
+    static Kit copy(Kit kit) {
         List<ItemStack> storage = new ArrayList<>(kit.storage().size());
         for (ItemStack stack : kit.storage()) {
             storage.add(stack == null ? null : stack.clone());

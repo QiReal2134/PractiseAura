@@ -504,14 +504,24 @@ public class Game {
 
     protected void checkEnd() {
         if (state != GameState.RUNNING) return;
-        // 一队"无人存活且死了回不来"（床没了/模式一条命）才算被淘汰
-        boolean redCanComeBack = mode.respawnOnDeath() && bedAlive(Team.RED);
-        boolean blueCanComeBack = mode.respawnOnDeath() && bedAlive(Team.BLUE);
+        // 一队"无人存活且没有人会回来"才算被淘汰。
+        // 会回来 = 模式允许重生且床还在，或有成员正在幽灵等待（他们进幽灵时床还在，到期会重生）
+        boolean redCanComeBack = canTeamComeBack(Team.RED);
+        boolean blueCanComeBack = canTeamComeBack(Team.BLUE);
         boolean redOut = aliveCount(Team.RED) == 0 && (!redCanComeBack || teamCount(Team.RED) == 0);
         boolean blueOut = aliveCount(Team.BLUE) == 0 && (!blueCanComeBack || teamCount(Team.BLUE) == 0);
         if (redOut && blueOut) end(null);
         else if (redOut) end(Team.BLUE);
         else if (blueOut) end(Team.RED);
+    }
+
+    /** 该队是否还有人会回到场上（幽灵等待中的重生也算） */
+    private boolean canTeamComeBack(Team team) {
+        if (mode.respawnOnDeath() && bedAlive(team)) return true;
+        for (UUID id : ghosts) {
+            if (teamOf(id) == team) return true; // 幽灵等待中的成员到期会重生
+        }
+        return false;
     }
 
     private int teamCount(Team team) {
@@ -956,9 +966,9 @@ public class Game {
     /** 发放装备：个人 kit > 模式 kit（/pa kit 设置）或模式默认，每次重生都是满配 */
     protected final void giveKit(Player p, Team team) {
         PlayerInventory inv = p.getInventory();
-        boolean personal = giveArenaKit(p, team, inv);
-        // 守家羊毛只在默认 kit 时附加；自定义/个人 kit 自带羊毛的话不重复发（避免多给）
-        if (!personal && !arena.hasCustomKit()) {
+        boolean customKit = giveArenaKit(p, team, inv);
+        // 守家羊毛只在默认 kit 时附加：个人/模式 kit 的围床方块由 kit 本身提供（teamColored 自动染队色），避免多给
+        if (!customKit) {
             ItemStack guard = guardItem(team);
             if (guard != null && guard.getAmount() > 0) {
                 inv.addItem(guard);
@@ -967,7 +977,7 @@ public class Game {
         givenKit.put(p.getUniqueId(), snapshotInventory(p));
     }
 
-    /** @return 是否发放的是该玩家的个人 kit */
+    /** @return 是否发放了自定义 kit（个人 kit 或模式 kit）；false = 模式默认 kit */
     private boolean giveArenaKit(Player p, Team team, PlayerInventory inv) {
         KitManager.Kit personal = plugin.playerKits().get(p.getUniqueId(), mode.id());
         KitManager.Kit kit = personal != null ? personal : plugin.kits().get(mode.id());
@@ -982,7 +992,7 @@ public class Game {
             if (kit.chestplate() != null) inv.setChestplate(teamColored(kit.chestplate().clone(), team));
             if (kit.leggings() != null) inv.setLeggings(teamColored(kit.leggings().clone(), team));
             if (kit.boots() != null) inv.setBoots(teamColored(kit.boots().clone(), team));
-            return personal != null;
+            return true;
         }
         mode.giveDefaultKit(this, p, team);
         // 默认 kit 里的皮革也染成队伍颜色
@@ -1166,6 +1176,14 @@ public class Game {
             if (p != null && p.isOnline()) list.add(p);
         }
         return list;
+    }
+
+    /** 记分板观众（参与者 + 观战者）：记分板每秒刷新只需遍历这里，不必全服扫描 */
+    public List<UUID> scoreboardViewers() {
+        List<UUID> out = new ArrayList<>(players.size() + spectators.size());
+        out.addAll(players.keySet());
+        out.addAll(spectators);
+        return out;
     }
 
     /** 广播一条消息键（含占位符），参与者和观战者都会收到 */

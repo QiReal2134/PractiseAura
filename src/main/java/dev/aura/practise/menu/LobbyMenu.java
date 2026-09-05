@@ -35,8 +35,17 @@ public class LobbyMenu {
         this.tagKey = new NamespacedKey(plugin, "menuitem");
     }
 
-    public Map<UUID, ModeHandler> lastGame() {
-        return lastGame;
+    /** 记住玩家上次玩的模式（用于快速加入/约战默认模式），退出时由监听器清除 */
+    public void rememberLastGame(UUID id, ModeHandler mode) {
+        if (mode != null) lastGame.put(id, mode);
+    }
+
+    public ModeHandler lastGameOf(UUID id) {
+        return lastGame.get(id);
+    }
+
+    public void forgetLastGame(UUID id) {
+        lastGame.remove(id);
     }
 
     // ------------------------------------------------------------------

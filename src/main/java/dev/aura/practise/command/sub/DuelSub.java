@@ -79,8 +79,8 @@ public class DuelSub implements SubCommand {
                 return;
             }
         } else {
-            mode = plugin.lobbyMenu().lastGame().getOrDefault(p.getUniqueId(),
-                    ModeRegistry.get("bedfight"));
+            ModeHandler last = plugin.lobbyMenu().lastGameOf(p.getUniqueId());
+            mode = last != null ? last : ModeRegistry.get("bedfight");
         }
         int rounds = 1;
         if (roundsInput != null) {
