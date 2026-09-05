@@ -61,7 +61,7 @@ public class Game {
     private final Map<UUID, BukkitTask> ghostTasks = new HashMap<>();
     private final Set<UUID> spectators = new HashSet<>();
     /** 本局内玩家死亡时快照的背包（自动保存个人 kit 调整，不影响他人） */
-    private final Map<UUID, PersonalKit> personalKits = new HashMap<>();
+
     private final Map<UUID, Long> protectionUntil = new HashMap<>();
     /** 最近攻击者记录：虚空/环境死亡时把击杀归属给 8 秒内打过你的人 */
     private final Map<UUID, UUID> lastAttacker = new HashMap<>();
@@ -836,7 +836,7 @@ public class Game {
             Location head = pos().bedHead(team);
             if (head == null) continue;
             for (Arena.GuardEntry entry : arena.getGuardEntries()) {
-                Arena.GuardEntry e = team == Team.BLUE ? arena.entryForBlue(entry) : entry;
+                Arena.GuardEntry e = team == Team.BLUE ? arena.entryForBlue(pos(), entry) : entry;
                 Block block = head.clone().add(e.dx(), e.dy(), e.dz()).getBlock();
                 block.setBlockData(Bukkit.createBlockData(e.data()));
                 guardBlocks.add(block.getLocation());
@@ -939,60 +939,16 @@ public class Game {
     }
 
     // ------------------------------------------------------------------
-    // 装备：个人 kit 快照 → 竞技场 kit → 模式默认 kit，最后补守家羊毛
+    // 装备：模式 kit（/pa kit 设置）或模式默认，每次重生都是满配
     // ------------------------------------------------------------------
 
-    private record PersonalKit(List<ItemStack> storage, ItemStack helmet, ItemStack chestplate,
-                               ItemStack leggings, ItemStack boots) {
-    }
-
-    /** 死亡事件当场调用（此时背包还没被原版清空）；全空则不保存 */
+    /** 兼容保留：个人快照机制已移除，重生统一重新发放完整 kit */
     public void snapshotKit(Player p) {
-        PlayerInventory inv = p.getInventory();
-        List<ItemStack> storage = new ArrayList<>();
-        for (ItemStack stack : inv.getStorageContents()) {
-            storage.add(stack == null ? null : stack.clone());
-        }
-        PersonalKit kit = new PersonalKit(
-                storage,
-                cloneOrNull(inv.getHelmet()),
-                cloneOrNull(inv.getChestplate()),
-                cloneOrNull(inv.getLeggings()),
-                cloneOrNull(inv.getBoots()));
-        boolean empty = kit.helmet() == null && kit.chestplate() == null
-                && kit.leggings() == null && kit.boots() == null;
-        for (ItemStack stack : storage) {
-            if (stack != null && !stack.getType().isAir()) {
-                empty = false;
-                break;
-            }
-        }
-        if (!empty) {
-            personalKits.put(p.getUniqueId(), kit);
-        }
     }
 
-    private ItemStack cloneOrNull(ItemStack stack) {
-        if (stack == null || stack.getType().isAir()) return null;
-        return stack.clone();
-    }
-
-    /** 发放装备：个人改过的 kit 优先，其次竞技场 kit，最后模式默认 */
+    /** 发放装备：模式 kit（/pa kit 设置）或模式默认，每次重生都是满配 */
     protected final void giveKit(Player p, Team team) {
         PlayerInventory inv = p.getInventory();
-        PersonalKit personal = personalKits.get(p.getUniqueId());
-        if (personal != null) {
-            // 本局内玩家调整过物品：按他自己的来，不影响竞技场 kit 和其他人
-            for (int i = 0; i < personal.storage().size(); i++) {
-                ItemStack stack = personal.storage().get(i);
-                if (stack != null && !stack.getType().isAir()) inv.setItem(i, stack.clone());
-            }
-            if (personal.helmet() != null) inv.setHelmet(personal.helmet().clone());
-            if (personal.chestplate() != null) inv.setChestplate(personal.chestplate().clone());
-            if (personal.leggings() != null) inv.setLeggings(personal.leggings().clone());
-            if (personal.boots() != null) inv.setBoots(personal.boots().clone());
-            return;
-        }
         giveArenaKit(p, team, inv);
         ItemStack guard = guardItem(team);
         if (guard != null && guard.getAmount() > 0) {

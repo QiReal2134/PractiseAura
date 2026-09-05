@@ -164,12 +164,16 @@ public class Arena {
     }
 
     /**
-     * 把相对红床记录的围床偏移变换到蓝床坐标系。
+     * 把相对红床记录的围床偏移变换到蓝床坐标系（默认第 1 组点位）。
      * 两床朝向相反时自动镜像（红床靠后侧的墙 → 蓝床靠后侧的墙），
      * 朝向相同或无法确定时原样返回。
      */
     public GuardEntry entryForBlue(GuardEntry e) {
-        ArenaPosition pos = positions.get(0);
+        return entryForBlue(positions.get(0), e);
+    }
+
+    /** 同上，但按指定点位的两床朝向镜像——对局实际用哪组点位就传哪组 */
+    public GuardEntry entryForBlue(ArenaPosition pos, GuardEntry e) {
         BlockFace f1 = pos.bedFacing(Team.RED);
         BlockFace f2 = pos.bedFacing(Team.BLUE);
         if (f1 == null || f2 == null || f2 != f1.getOppositeFace()) return e;

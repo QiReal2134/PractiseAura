@@ -87,6 +87,8 @@ public class CommandDispatcher implements CommandExecutor, TabCompleter {
         }
         SubCommand sub = subs.get(args[0].toLowerCase());
         if (sub == null) return List.of();
+        // 参数补全只看权限；不用 visible()——隐藏开关不该挡住有权限的人补全参数
+        if (sub.permission() != null && !sender.hasPermission(sub.permission())) return List.of();
         return filter(sub.tab(plugin, sender, args), args[args.length - 1]);
     }
 
