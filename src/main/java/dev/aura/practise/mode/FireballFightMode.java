@@ -82,7 +82,7 @@ public class FireballFightMode implements ModeHandler {
         long last = lastThrow.getOrDefault(id, 0L);
         if (now - last < cooldown) {
             double left = Math.max(0.1, (cooldown - (now - last)) / 1000.0);
-            Msg.send(p, "fireball.cooldown", "seconds", String.format("%.1f", left));
+            Msg.send(p, "fireball.cooldown", String.format("%.1f", left));
             return true; // 已处理：事件取消但不发射
         }
         lastThrow.put(id, now);

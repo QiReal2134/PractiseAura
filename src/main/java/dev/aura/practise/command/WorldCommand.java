@@ -142,7 +142,7 @@ public class WorldCommand implements CommandExecutor, TabCompleter {
         }
         String name = args[1];
         if (Bukkit.getWorld(name) != null) {
-            Msg.send(sender, "world.exists", "name", name);
+            Msg.send(sender, "world.exists", name);
             return;
         }
         String type = args.length >= 3 ? args[2].toLowerCase() : "void";
@@ -171,7 +171,7 @@ public class WorldCommand implements CommandExecutor, TabCompleter {
         if (type.equals("void")) {
             prepareVoidWorld(world);
         }
-        Msg.send(sender, "world.created", "name", name, "type", type);
+        Msg.send(sender, "world.created", name, type);
         if (sender instanceof Player p) {
             p.teleport(world.getSpawnLocation());
             Msg.send(p, "world.teleported-to-you");
@@ -186,7 +186,7 @@ public class WorldCommand implements CommandExecutor, TabCompleter {
         }
         World world = Bukkit.getWorld(args[1]);
         if (world == null) {
-            Msg.send(sender, "world.missing", "name", args[1]);
+            Msg.send(sender, "world.missing", args[1]);
             return;
         }
         Player p = (Player) sender;
@@ -195,7 +195,7 @@ public class WorldCommand implements CommandExecutor, TabCompleter {
             target.setY(Math.max(world.getMaxHeight() - 20, target.getY()));
         }
         p.teleport(target);
-        Msg.send(p, "world.teleported", "name", world.getName());
+        Msg.send(p, "world.teleported", world.getName());
     }
 
     private void delete(CommandSender sender, String[] args) {
@@ -209,7 +209,7 @@ public class WorldCommand implements CommandExecutor, TabCompleter {
         }
         // 已登记但未加载的世界也要放行：deleteWorldFiles 会清理 worlds.yml 登记和残留文件夹
         if (Bukkit.getWorld(args[1]) == null && !isRegistered(plugin, args[1])) {
-            Msg.send(sender, "world.missing", "name", args[1]);
+            Msg.send(sender, "world.missing", args[1]);
             return;
         }
         deleteWorldFiles(plugin, sender, args[1]);
@@ -221,17 +221,17 @@ public class WorldCommand implements CommandExecutor, TabCompleter {
         if (world == null) {
             // 世界未加载：只清理 worlds.yml 登记过的自定义世界，防止按裸名误删服务器目录下的任意文件夹
             if (!isRegistered(plugin, worldName)) {
-                Msg.send(sender, "world.missing", "name", worldName);
+                Msg.send(sender, "world.missing", worldName);
                 return;
             }
             // 文件夹可能从未落盘（虚空世界空区块不保存）或有残留，删得掉多少算多少
             String error = deleteFolder(Bukkit.getWorldContainer().toPath().resolve(worldName));
             if (error != null) {
-                Msg.send(sender, "world.delete-folder-fail", "error", error);
+                Msg.send(sender, "world.delete-folder-fail", error);
                 return; // 保留登记，文件夹还在时可重试
             }
             unregister(plugin, worldName);
-            Msg.send(sender, "world.deleted", "name", worldName);
+            Msg.send(sender, "world.deleted", worldName);
             return;
         }
         if (Bukkit.getWorlds().indexOf(world) == 0) {
@@ -239,7 +239,7 @@ public class WorldCommand implements CommandExecutor, TabCompleter {
             return;
         }
         if (plugin.games().worldInUse(world.getName())) {
-            Msg.send(sender, "world.delete-in-use", "world", world.getName());
+            Msg.send(sender, "world.delete-in-use", world.getName());
             return;
         }
         if (!world.getPlayers().isEmpty()) {
@@ -254,11 +254,11 @@ public class WorldCommand implements CommandExecutor, TabCompleter {
         }
         String error = deleteFolder(folder);
         if (error != null) {
-            Msg.send(sender, "world.delete-folder-fail", "error", error);
+            Msg.send(sender, "world.delete-folder-fail", error);
             return; // 保留登记：文件夹还在，重启会重新加载，可重试删除
         }
         unregister(plugin, worldName); // 同步移除 worlds.yml 登记，避免重启后重新加载已删除的世界
-        Msg.send(sender, "world.deleted", "name", worldName);
+        Msg.send(sender, "world.deleted", worldName);
     }
 
     /** 递归删除文件夹；返回 null 表示彻底删除（或本来就不存在），否则为首个失败原因 */

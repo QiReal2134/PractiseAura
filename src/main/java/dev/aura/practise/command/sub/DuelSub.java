@@ -59,7 +59,7 @@ public class DuelSub implements SubCommand {
                         String modeInput, String roundsInput) {
         Player target = Bukkit.getPlayerExact(targetName);
         if (target == null) {
-            Msg.send(p, "duel.not-online", "target", targetName);
+            Msg.send(p, "duel.not-online", targetName);
             return;
         }
         if (target.equals(p)) {
@@ -75,7 +75,7 @@ public class DuelSub implements SubCommand {
         if (modeInput != null) {
             mode = ModeRegistry.parse(modeInput);
             if (mode == null) {
-                Msg.send(p, "duel.unknown-mode", "input", modeInput);
+                Msg.send(p, "duel.unknown-mode", modeInput);
                 return;
             }
         } else {
@@ -93,7 +93,7 @@ public class DuelSub implements SubCommand {
         }
         // 对方已有人约 → 拒绝，避免覆盖骚扰
         if (plugin.duelInvites().containsKey(target.getUniqueId())) {
-            Msg.send(p, "duel.target-pending", "target", target.getName());
+            Msg.send(p, "duel.target-pending", target.getName());
             return;
         }
         // 发送者防骚扰冷却（duel-cooldown-seconds，0 = 无冷却）
@@ -101,7 +101,7 @@ public class DuelSub implements SubCommand {
         Long lastSent = plugin.duelCooldowns().get(p.getUniqueId());
         long now = System.currentTimeMillis();
         if (cooldownMillis > 0 && lastSent != null && now - lastSent < cooldownMillis) {
-            Msg.send(p, "duel.cooldown", "seconds",
+            Msg.send(p, "duel.cooldown",
                     String.format("%.0f", (cooldownMillis - (now - lastSent)) / 1000.0 + 1));
             return;
         }
@@ -115,8 +115,7 @@ public class DuelSub implements SubCommand {
                 "info", rounds > 1 ? rounds + " 局制，" : "");
         target.sendMessage(Msg.prefix()
                 .append(Msg.component("duel.invite",
-                        "player", p.getName(), "mode", mode.display(),
-                        "rounds-info", rounds > 1 ? "（" + rounds + " 局制）" : ""))
+                        p.getName(), mode.display(), rounds > 1 ? "（" + rounds + " 局制）" : ""))
                 .append(Msg.legacy(Msg.text("duel.accept-btn"))
                         .clickEvent(ClickEvent.runCommand("/pa duel accept"))
                         .hoverEvent(HoverEvent.showText(Msg.legacy(Msg.text("duel.accept-hover")))))
@@ -135,7 +134,7 @@ public class DuelSub implements SubCommand {
         if (invite.expired()) {
             Msg.send(p, "duel.expired");
             Player old = Bukkit.getPlayer(invite.senderId());
-            if (old != null) Msg.send(old, "duel.expired-notice", "player", p.getName());
+            if (old != null) Msg.send(old, "duel.expired-notice", p.getName());
             return;
         }
         Player inviter = Bukkit.getPlayer(invite.senderId());
@@ -144,8 +143,8 @@ public class DuelSub implements SubCommand {
             return;
         }
         if (!accept) {
-            Msg.send(inviter, "duel.denied-inviter", "player", p.getName());
-            Msg.send(p, "duel.denied", "player", inviter.getName());
+            Msg.send(inviter, "duel.denied-inviter", p.getName());
+            Msg.send(p, "duel.denied", inviter.getName());
             return;
         }
         if (plugin.games().gameOf(p.getUniqueId()) != null
@@ -154,11 +153,11 @@ public class DuelSub implements SubCommand {
             return;
         }
         if (plugin.games().startDuel(inviter, p, invite.mode(), invite.rounds())) {
-            Msg.send(inviter, "duel.accepted-inviter", "mode", invite.mode().display());
-            Msg.send(p, "duel.accepted", "player", inviter.getName());
+            Msg.send(inviter, "duel.accepted-inviter", invite.mode().display());
+            Msg.send(p, "duel.accepted", inviter.getName());
         } else {
             Msg.send(p, "duel.no-arena");
-            Msg.send(inviter, "duel.accept-no-arena", "player", p.getName());
+            Msg.send(inviter, "duel.accept-no-arena", p.getName());
         }
     }
 

@@ -98,7 +98,7 @@ public class SettingSub implements SubCommand {
     public static void apply(PractiseAuraPlugin plugin, CommandSender to, String key, String value) {
         List<String> cycle = CYCLES.get(key);
         if (cycle == null) {
-            Msg.send(to, "setting.unknown-key", "key", key);
+            Msg.send(to, "setting.unknown-key", key);
             return;
         }
         if (value.equalsIgnoreCase("next")) {
@@ -114,7 +114,7 @@ public class SettingSub implements SubCommand {
             try {
                 d = Double.parseDouble(value);
             } catch (NumberFormatException ex) {
-                Msg.send(to, "setting.bad-number", "value", value);
+                Msg.send(to, "setting.bad-number", value);
                 return;
             }
             if (d < 0) {
@@ -127,7 +127,7 @@ public class SettingSub implements SubCommand {
         plugin.saveConfig();
         plugin.settings().refresh(); // 刷新缓存，立即生效
         String shown = value.equals("0") ? "0（关闭）" : value;
-        Msg.send(to, "setting.applied", "key", key, "value", shown);
+        Msg.send(to, "setting.applied", key, shown);
     }
 
     @Override
@@ -139,13 +139,13 @@ public class SettingSub implements SubCommand {
             return;
         }
         if (args.length < 2) {
-            Msg.send(sender, "setting.keys", "keys", String.join(", ", CYCLES.keySet()));
+            Msg.send(sender, "setting.keys", String.join(", ", CYCLES.keySet()));
             Msg.send(sender, "setting.usage");
             return;
         }
         String key = args[1].toLowerCase(Locale.ROOT);
         if (!CYCLES.containsKey(key)) {
-            Msg.send(sender, "setting.unknown-key", "key", key);
+            Msg.send(sender, "setting.unknown-key", key);
             return;
         }
         if (args.length >= 3 && !args[2].equalsIgnoreCase("input")) {
@@ -160,7 +160,7 @@ public class SettingSub implements SubCommand {
         plugin.pendingSettings().put(p.getUniqueId(),
                 new PendingSetting(key, System.currentTimeMillis() + 30_000L));
         p.sendMessage(Msg.prefix()
-                .append(Msg.component("setting.input-prompt", "key", key)));
+                .append(Msg.component("setting.input-prompt", key)));
         p.sendMessage(Msg.prefix()
                 .append(Msg.legacy(Msg.text("setting.cancel-btn"))
                         .clickEvent(ClickEvent.runCommand("/pa setting cancel"))

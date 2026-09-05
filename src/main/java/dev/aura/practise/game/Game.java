@@ -174,8 +174,7 @@ public class Game {
         Team team = nextTeam();
         players.put(p.getUniqueId(), team);
         alive.add(p.getUniqueId());
-        broadcast("game.joined", "name", p.getName(),
-                "count", String.valueOf(players.size()), "max", String.valueOf(maxPlayers()));
+        broadcast("game.joined", p.getName(), String.valueOf(players.size()), String.valueOf(maxPlayers()));
         // 排队阶段留在原地（大厅），人齐后再传送；背包清空只保留退出排队染料
         p.setGameMode(GameMode.SURVIVAL);
         clearInventory(p);
@@ -191,7 +190,7 @@ public class Game {
         recordPersonalKit(p); // 掉线/退局也保存调整过的背包（没领过装备时自动跳过）
         alive.remove(p.getUniqueId());
         cancelGhost(p.getUniqueId()); // 幽灵退出：立即还原状态，别等重生任务下一拍（掉线时药水会被写进玩家数据）
-        broadcast(reasonKey, "name", p.getName());
+        broadcast(reasonKey, p.getName());
         if (state == GameState.STARTING) {
             if (matchCountdown) {
                 stopCountdown();
@@ -243,9 +242,7 @@ public class Game {
         double newMax = Math.min(cap, maxHealth.getBaseValue() * 2);
         maxHealth.setBaseValue(newMax);
         mate.setHealth(Math.min(newMax, mate.getHealth() + quitHealth));
-        broadcast("game.health-inherited",
-                "mate", mate.getName(), "quitter", quitter.getName(),
-                "max", String.format("%.0f", newMax));
+        broadcast("game.health-inherited", mate.getName(), quitter.getName(), String.format("%.0f", newMax));
     }
 
     /** 排队/倒计时中断：把还在场上的玩家送回大厅并发等待区物品 */
@@ -300,7 +297,7 @@ public class Game {
             if (spawn != null) pl.teleport(spawn);
             pl.setFallDistance(0f);
         }
-        broadcast("match.countdown", "seconds", String.valueOf(countdownSeconds));
+        broadcast("match.countdown", String.valueOf(countdownSeconds));
         // 匹配成功：图腾特效（粒子爆发 + 模式图标从头顶升起）
         for (UUID id : players.keySet()) {
             Player pl = Bukkit.getPlayer(id);
@@ -490,9 +487,9 @@ public class Game {
             credited = true;
         }
         if (credited) {
-            broadcast("game.killed", "victim", nameOf(victim.getUniqueId()), "killer", killer.getName());
+            broadcast("game.killed", nameOf(victim.getUniqueId()), killer.getName());
         } else {
-            broadcast("game.died", "victim", nameOf(victim.getUniqueId()));
+            broadcast("game.died", nameOf(victim.getUniqueId()));
         }
         if (shouldRespawn(victim)) {
             Msg.title(victim, "game.death-title", "game.death-sub");
@@ -611,7 +608,7 @@ public class Game {
             alive.add(id); // 存活玩家的装备由 start() 统一发放；死亡界面的由重生事件处理
         }
         countdownBar = Bukkit.createBossBar(
-                Msg.text("match.round-bar", "round", String.valueOf(roundsCurrent)).replace('&', '§'),
+                Msg.text("match.round-bar", String.valueOf(roundsCurrent)).replace('&', '§'),
                 org.bukkit.boss.BarColor.YELLOW, org.bukkit.boss.BarStyle.SEGMENTED_10);
         countdownBar.setProgress(1.0);
         updateBarViewers();
@@ -637,7 +634,7 @@ public class Game {
                     "blue", String.valueOf(roundWins.getOrDefault(Team.BLUE, 0)));
         }
         String mvp = mvpDescription();
-        if (mvp != null) broadcast("game.mvp", "mvp", mvp);
+        if (mvp != null) broadcast("game.mvp", mvp);
         for (Player p : onlinePlayers()) {
             Msg.title(p,
                     winner == null ? "game.end-title-draw" : "game.end-title",
@@ -822,14 +819,14 @@ public class Game {
                 ? block.getRelative(bed.getFacing().getOppositeFace())
                 : block.getRelative(bed.getFacing());
         other.setType(Material.AIR);
-        broadcast("bed.destroyed", "player", breaker.getName(), "team", legacyName(brokenTeam));
+        broadcast("bed.destroyed", breaker.getName(), legacyName(brokenTeam));
         for (Player pl : onlinePlayers()) {
             Team team = teamOf(pl.getUniqueId());
             if (team == null) continue;
             if (team == brokenTeam) {
                 Msg.title(pl, "bed.destroyed-title", "bed.destroyed-sub");
             } else {
-                Msg.title(pl, "bed.enemy-title", "bed.enemy-sub", "team", legacyName(brokenTeam));
+                Msg.title(pl, "bed.enemy-title", "bed.enemy-sub", legacyName(brokenTeam));
             }
             pl.playSound(pl.getLocation(), Sound.ENTITY_ENDER_DRAGON_GROWL, 0.6f, 1f);
         }
@@ -901,11 +898,11 @@ public class Game {
                     endGhost(player);
                     markAlive(id);
                     prepareSpawn(player, team);
-                    Msg.title(player, "ghost.respawn-title", "ghost.respawn-sub", "team", legacyName(team));
+                    Msg.title(player, "ghost.respawn-title", "ghost.respawn-sub");
                     player.playSound(player.getLocation(), Sound.ENTITY_PLAYER_LEVELUP, 0.8f, 1.5f);
                     return;
                 }
-                Msg.title(player, "ghost.wait-title", "ghost.wait-sub", "seconds", String.valueOf(left));
+                Msg.title(player, "ghost.wait-title", "ghost.wait-sub", String.valueOf(left));
                 left--;
             }
         }.runTaskTimer(plugin, 10L, 20L));
@@ -1091,9 +1088,9 @@ public class Game {
         Location point = arena.spectatorPoint(position);
         if (point != null) p.teleport(point);
         plugin.updateVisibility(p);
-        broadcast("spectate.started", "player", p.getName());
+        broadcast("spectate.started", p.getName());
         plugin.boards().showGame(p, this);
-        Msg.send(p, "spectate.hint", "arena", arena.getName());
+        Msg.send(p, "spectate.hint", arena.getName());
     }
 
     /** 退出观战并回大厅 */

@@ -55,7 +55,7 @@ public class SetupSub implements SubCommand {
         }
         Arena arena = plugin.arenas().get(args[1]);
         if (arena == null) {
-            Msg.send(p, "error.arena-missing", "arena", args[1]);
+            Msg.send(p, "error.arena-missing", args[1]);
             return;
         }
         if (!CmdUtil.teleportToArenaWorld(plugin, p, arena)) return;

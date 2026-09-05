@@ -65,7 +65,7 @@ public class GenVoidSub implements SubCommand {
         ModeHandler mode = dev.aura.practise.mode.ModeRegistry.get("bedfight");
         Arena arena = plugin.arenas().create(args[1], mode);
         if (arena == null) {
-            Msg.send(sender, "genvoid.exists", "name", args[1]);
+            Msg.send(sender, "genvoid.exists", args[1]);
             return;
         }
         ArenaPosition pos = arena.position(1);

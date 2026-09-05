@@ -43,18 +43,18 @@ public class DeleteSub implements SubCommand {
         }
         Arena arena = plugin.arenas().get(args[1]);
         if (arena == null) {
-            Msg.send(sender, "error.arena-missing", "arena", args[1]);
+            Msg.send(sender, "error.arena-missing", args[1]);
             return;
         }
         if (plugin.games().arenaInUse(arena)) {
-            Msg.send(sender, "delete.in-use", "arena", arena.getName());
+            Msg.send(sender, "delete.in-use", arena.getName());
             return;
         }
         // 记录地图世界：删除后若该世界不再被任何场使用且是登记的自定义世界，一并真实删除
         String worldName = arena.worldName();
         boolean worldRegistered = worldName != null && WorldCommand.isRegistered(plugin, worldName);
         plugin.arenas().delete(args[1]);
-        Msg.send(sender, "delete.success", "name", args[1]);
+        Msg.send(sender, "delete.success", args[1]);
         if (worldRegistered && plugin.arenas().all().stream()
                 .noneMatch(a -> worldName.equals(a.worldName()))) {
             WorldCommand.deleteWorldFiles(plugin, sender, worldName);

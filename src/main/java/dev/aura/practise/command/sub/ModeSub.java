@@ -57,7 +57,7 @@ public class ModeSub implements SubCommand {
     private static void applyFlag(PractiseAuraPlugin plugin, CommandSender to,
                                  ModeHandler mode, String flag, String value) {
         if (!FLAGS.contains(flag)) {
-            Msg.send(to, "mode.unknown-flag", "flag", flag, "flags", String.join(", ", FLAGS));
+            Msg.send(to, "mode.unknown-flag", flag, String.join(", ", FLAGS));
             return;
         }
         boolean v;
@@ -72,7 +72,7 @@ public class ModeSub implements SubCommand {
         plugin.getConfig().set("modes." + mode.id().toLowerCase() + "." + flag, v);
         plugin.saveConfig();
         ModeRegistry.refresh(plugin);
-        Msg.send(to, "mode.applied", "mode", mode.display(), "flag", flag, "value", String.valueOf(v));
+        Msg.send(to, "mode.applied", mode.display(), flag, String.valueOf(v));
     }
 
     @Override
@@ -80,20 +80,20 @@ public class ModeSub implements SubCommand {
         if (!CmdUtil.adminCheck(sender)) return;
         if (args.length < 2) {
             Msg.send(sender, "mode.usage");
-            Msg.send(sender, "mode.modes", "modes", ModeRegistry.ids());
+            Msg.send(sender, "mode.modes", ModeRegistry.ids());
             return;
         }
         ModeHandler mode = ModeRegistry.parse(args[1]);
         if (mode == null) {
-            Msg.send(sender, "mode.unknown-mode", "input", args[1], "modes", ModeRegistry.ids());
+            Msg.send(sender, "mode.unknown-mode", args[1], ModeRegistry.ids());
             return;
         }
         if (args.length < 3) {
-            Msg.send(sender, "mode.list-header", "mode", mode.display());
+            Msg.send(sender, "mode.list-header", mode.display());
             for (String flag : FLAGS) {
-                Msg.send(sender, "mode.list-entry", "flag", flag, "value", flagValue(plugin, mode, flag));
+                Msg.send(sender, "mode.list-entry", flag, flagValue(plugin, mode, flag));
             }
-            Msg.send(sender, "mode.modify-hint", "id", mode.id());
+            Msg.send(sender, "mode.modify-hint", mode.id());
             return;
         }
         String flag = args[2].toLowerCase(Locale.ROOT);

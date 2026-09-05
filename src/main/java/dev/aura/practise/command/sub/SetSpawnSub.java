@@ -45,7 +45,7 @@ public class SetSpawnSub implements SubCommand {
         }
         Arena arena = plugin.arenas().get(args[1]);
         if (arena == null) {
-            Msg.send(p, "error.arena-missing", "arena", args[1]);
+            Msg.send(p, "error.arena-missing", args[1]);
             return;
         }
         if (plugin.games().arenaInUse(arena)) Msg.send(p, "setup.in-use-hint");
@@ -63,7 +63,7 @@ public class SetSpawnSub implements SubCommand {
         }
         arena.position(group).setSpawn(team, p.getLocation());
         plugin.arenas().saveAll();
-        Msg.send(p, "setspawn.success", "arena", arena.getName(), "group", String.valueOf(group), "team", team.display());
+        Msg.send(p, "setspawn.success", arena.getName(), String.valueOf(group), team.display());
     }
 
     @Override

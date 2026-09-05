@@ -49,7 +49,7 @@ public final class CmdUtil {
         if (world == null || p.getWorld().equals(world)) return true;
         Location target = arena.firstSpawn() != null ? arena.firstSpawn() : world.getSpawnLocation();
         p.teleport(target);
-        Msg.send(p, "setup.world-teleported", "world", world.getName());
+        Msg.send(p, "setup.world-teleported", world.getName());
         return false;
     }
 

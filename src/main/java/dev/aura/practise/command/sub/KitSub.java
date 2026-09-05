@@ -42,17 +42,17 @@ public class KitSub implements SubCommand {
         Player p = (Player) sender;
         if (args.length < 2) {
             Msg.send(p, "kit.usage");
-            Msg.send(p, "error.modes", "modes", ModeRegistry.ids());
+            Msg.send(p, "error.modes", ModeRegistry.ids());
             return;
         }
         ModeHandler mode = ModeRegistry.parse(args[1]);
         if (mode == null) {
-            Msg.send(p, "kit.unknown-mode", "input", args[1], "modes", ModeRegistry.ids());
+            Msg.send(p, "kit.unknown-mode", args[1], ModeRegistry.ids());
             return;
         }
         if (args.length >= 3 && args[2].equalsIgnoreCase("clear")) {
             plugin.kits().clear(mode.id());
-            Msg.send(p, "kit.cleared", "mode", mode.display());
+            Msg.send(p, "kit.cleared", mode.display());
             return;
         }
         if (args.length >= 3 && args[2].equalsIgnoreCase("forget")) {
@@ -63,9 +63,9 @@ public class KitSub implements SubCommand {
             }
             org.bukkit.OfflinePlayer target = org.bukkit.Bukkit.getOfflinePlayer(args[3]);
             if (plugin.playerKits().clear(target.getUniqueId(), mode.id())) {
-                Msg.send(p, "kit.forgot", "player", args[3], "mode", mode.display());
+                Msg.send(p, "kit.forgot", args[3], mode.display());
             } else {
-                Msg.send(p, "kit.forgot-none", "player", args[3], "mode", mode.display());
+                Msg.send(p, "kit.forgot-none", args[3], mode.display());
             }
             return;
         }
@@ -73,7 +73,7 @@ public class KitSub implements SubCommand {
         plugin.kits().set(mode.id(), new dev.aura.practise.manager.KitManager.Kit(
                 new ArrayList<>(Arrays.asList(inv.getStorageContents())),
                 inv.getHelmet(), inv.getChestplate(), inv.getLeggings(), inv.getBoots()));
-        Msg.send(p, "kit.saved", "mode", mode.display());
+        Msg.send(p, "kit.saved", mode.display());
         Msg.send(p, "kit.shared");
     }
 

@@ -44,7 +44,7 @@ public class GameManager {
         // 找一个有空闲点位的竞技场
         Arena arena = plugin.arenas().findFree(mode);
         if (arena == null) {
-            Msg.send(p, "join.no-arena", "mode", mode.display());
+            Msg.send(p, "join.no-arena", mode.display());
             return;
         }
         Game game = new Game(plugin, arena, mode, arena.freePosition());
@@ -62,7 +62,7 @@ public class GameManager {
         byPlayer.put(p.getUniqueId(), game);
         plugin.lobbyMenu().rememberLastGame(p.getUniqueId(), game.mode()); // 用于快速加入
         plugin.boards().showGame(p, game);
-        Msg.send(p, "join.success", "mode", game.mode().display(), "arena", game.arena().getName());
+        Msg.send(p, "join.success", game.mode().display(), game.arena().getName());
     }
 
     public void leave(Player p) {

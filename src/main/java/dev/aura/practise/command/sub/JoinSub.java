@@ -34,12 +34,12 @@ public class JoinSub implements SubCommand {
     public void execute(PractiseAuraPlugin plugin, CommandSender sender, String[] args) {
         if (!CmdUtil.isPlayer(sender)) return;
         if (args.length < 2) {
-            Msg.send(sender, "join.usage", "modes", ModeRegistry.ids());
+            Msg.send(sender, "join.usage", ModeRegistry.ids());
             return;
         }
         ModeHandler mode = ModeRegistry.parse(args[1]);
         if (mode == null) {
-            Msg.send(sender, "join.unknown-mode", "input", args[1], "modes", ModeRegistry.ids());
+            Msg.send(sender, "join.unknown-mode", args[1], ModeRegistry.ids());
             return;
         }
         plugin.games().join((Player) sender, mode);

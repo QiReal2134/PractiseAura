@@ -51,7 +51,7 @@ public class CommandDispatcher implements CommandExecutor, TabCompleter {
         for (SubCommand sub : distinct()) {
             if (!visible(sender, sub)) continue;
             String params = sub.params().isEmpty() ? "" : " " + sub.params();
-            Msg.send(sender, "help.entry", "name", sub.name(), "params", params, "desc", sub.description());
+            Msg.send(sender, "help.entry", sub.name(), params, sub.description());
         }
     }
 

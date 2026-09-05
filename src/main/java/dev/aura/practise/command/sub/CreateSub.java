@@ -39,7 +39,7 @@ public class CreateSub implements SubCommand {
     public void execute(PractiseAuraPlugin plugin, CommandSender sender, String[] args) {
         if (!CmdUtil.adminCheck(sender)) return;
         if (args.length < 3) {
-            Msg.send(sender, "create.usage", "modes", ModeRegistry.ids());
+            Msg.send(sender, "create.usage", ModeRegistry.ids());
             return;
         }
         String name = args[1];
@@ -49,16 +49,16 @@ public class CreateSub implements SubCommand {
         }
         ModeHandler mode = ModeRegistry.parse(args[2]);
         if (mode == null) {
-            Msg.send(sender, "error.unknown-mode", "input", args[2], "modes", ModeRegistry.ids());
+            Msg.send(sender, "error.unknown-mode", args[2], ModeRegistry.ids());
             return;
         }
         Arena arena = plugin.arenas().create(name, mode);
         if (arena == null) {
-            Msg.send(sender, "create.exists", "name", name);
+            Msg.send(sender, "create.exists", name);
             return;
         }
-        Msg.send(sender, "create.success", "name", name, "mode", mode.display());
-        Msg.send(sender, "create.hint", "name", name);
+        Msg.send(sender, "create.success", name, mode.display());
+        Msg.send(sender, "create.hint", name);
     }
 
     @Override

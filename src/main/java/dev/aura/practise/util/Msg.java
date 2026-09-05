@@ -11,10 +11,10 @@ import org.bukkit.command.CommandSender;
 import org.bukkit.entity.Player;
 
 /**
- * 消息出口：所有玩家可见文本都从 messages.yml 按键读取（用户可改）。
- * - send / broadcast：前缀 + 正文
- * - title：主/副标题
- * - 占位符 {name} 由调用方以 "name", value 变参传入；值里可含 § 或 & 颜色码
+ * 消息出口：所有玩家可见文本从 messages.yml 按键读取（用户可改）。
+ * 占位符用位置参数 {0} {1} {2}...，调用形如：
+ *   Msg.send(p, "game.killed", victimName, killerName);
+ * 参数值可含 & / § 颜色码（如 Team.legacyName()）。
  */
 public final class Msg {
 
@@ -28,10 +28,10 @@ public final class Msg {
         messages = msg;
     }
 
-    private static String raw(String key, String... replacements) {
+    private static String raw(String key, Object... args) {
         String text = messages.get(key);
-        for (int i = 0; i + 1 < replacements.length; i += 2) {
-            text = text.replace("{" + replacements[i] + "}", replacements[i + 1]);
+        for (int i = 0; i < args.length; i++) {
+            text = text.replace("{" + i + "}", String.valueOf(args[i]));
         }
         return text;
     }
@@ -42,50 +42,46 @@ public final class Msg {
                 .deserialize(text.replace('§', '&'));
     }
 
-    private static Component body(String key, String... replacements) {
-        return legacy(raw(key, replacements));
+    private static Component body(String key, Object... args) {
+        return legacy(raw(key, args));
     }
 
-    private static Component prefixComponent() {
+    /** 可配置前缀 Component（邀请/菜单等需要自行拼装的场合） */
+    public static Component prefix() {
         return legacy(raw("prefix"));
     }
 
-    /** 可配置前缀 Component（菜单/邀请等需要自行拼装的场合） */
-    public static Component prefix() {
-        return prefixComponent();
-    }
-
-    /** 原始消息文本（占位符已替换、& 颜色码保留），供 BossBar 等旧式 API 转换使用 */
-    public static String text(String key, String... replacements) {
-        return raw(key, replacements);
+    /** 原始消息文本（占位符已替换、颜色码保留），供 BossBar 等旧式 API 转换使用 */
+    public static String text(String key, Object... args) {
+        return raw(key, args);
     }
 
     /** 按键取消息并转为 Component（等价于 send 的正文，无前缀） */
-    public static Component component(String key, String... replacements) {
-        return body(key, replacements);
+    public static Component component(String key, Object... args) {
+        return body(key, args);
+    }
+
+    /** 字面文本转 Component（菜单等需要自定义结构的场合），支持 & 颜色码 */
+    public static Component plain(String text, net.kyori.adventure.text.format.NamedTextColor color) {
+        return legacy(text).colorIfAbsent(color);
     }
 
     // ------------------------------------------------------------------
     // 聊天
     // ------------------------------------------------------------------
 
-    public static void send(CommandSender to, String key, String... replacements) {
-        to.sendMessage(prefixComponent().append(body(key, replacements)));
+    public static void send(CommandSender to, String key, Object... args) {
+        to.sendMessage(prefix().append(body(key, args)));
     }
 
     // ------------------------------------------------------------------
-    // 标题
+    // 标题（主/副标题共享同一组参数）
     // ------------------------------------------------------------------
 
-    public static void title(Player p, String mainKey, String subKey, String... replacements) {
+    public static void title(Player p, String mainKey, String subKey, Object... args) {
         p.showTitle(Title.title(
-                body(mainKey, replacements),
-                body(subKey, replacements),
+                body(mainKey, args),
+                body(subKey, args),
                 Title.Times.times(Duration.ofMillis(150), Duration.ofMillis(1200), Duration.ofMillis(300))));
-    }
-
-    /** 纯文本组件（菜单等需要自定义结构的场合），支持 & 颜色码 */
-    public static Component plain(String text, net.kyori.adventure.text.format.NamedTextColor color) {
-        return legacy(text).colorIfAbsent(color);
     }
 }

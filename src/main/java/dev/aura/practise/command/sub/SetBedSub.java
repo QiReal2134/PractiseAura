@@ -46,7 +46,7 @@ public class SetBedSub implements SubCommand {
         }
         Arena arena = plugin.arenas().get(args[1]);
         if (arena == null) {
-            Msg.send(p, "error.arena-missing", "arena", args[1]);
+            Msg.send(p, "error.arena-missing", args[1]);
             return;
         }
         if (plugin.games().arenaInUse(arena)) Msg.send(p, "setup.in-use-hint");
@@ -60,7 +60,7 @@ public class SetBedSub implements SubCommand {
         if (!CmdUtil.teleportToArenaWorld(plugin, p, arena)) return;
         plugin.pendingBeds().put(p.getUniqueId(),
                 new PendingBed(arena.getName(), team, group, System.currentTimeMillis() + 60_000L));
-        Msg.send(p, "setbed.pending", "group", String.valueOf(group), "team", team.display());
+        Msg.send(p, "setbed.pending", String.valueOf(group), team.display());
     }
 
     @Override

@@ -45,7 +45,7 @@ public class SetBuildSub implements SubCommand {
         }
         Arena arena = plugin.arenas().get(args[1]);
         if (arena == null) {
-            Msg.send(p, "error.arena-missing", "arena", args[1]);
+            Msg.send(p, "error.arena-missing", args[1]);
             return;
         }
         if (plugin.games().arenaInUse(arena)) Msg.send(p, "setup.in-use-hint");
@@ -61,7 +61,7 @@ public class SetBuildSub implements SubCommand {
         if (!CmdUtil.teleportToArenaWorld(plugin, p, arena)) return;
         arena.setBuildPos(index, p.getLocation());
         plugin.arenas().saveAll();
-        Msg.send(p, "setbuild.success", "arena", arena.getName(), "index", String.valueOf(index));
+        Msg.send(p, "setbuild.success", arena.getName(), String.valueOf(index));
         Msg.send(p, arena.hasBuildRegion() ? "setbuild.done" : "setbuild.need-other");
     }
 

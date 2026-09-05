@@ -53,14 +53,14 @@ public class GuardSub implements SubCommand {
         }
         Arena arena = plugin.arenas().get(args[1]);
         if (arena == null) {
-            Msg.send(p, "error.arena-missing", "arena", args[1]);
+            Msg.send(p, "error.arena-missing", args[1]);
             return;
         }
         if (plugin.games().arenaInUse(arena)) Msg.send(p, "setup.in-use-hint");
         if (args[2].equalsIgnoreCase("clear")) {
             arena.clearGuards();
             plugin.arenas().saveAll();
-            Msg.send(p, "guard.cleared", "arena", arena.getName());
+            Msg.send(p, "guard.cleared", arena.getName());
             return;
         }
         if (!args[2].equalsIgnoreCase("ready")) {
@@ -91,7 +91,7 @@ public class GuardSub implements SubCommand {
             }
         }
         if (entries.isEmpty()) {
-            Msg.send(p, "guard.empty", "radius", String.valueOf(radius));
+            Msg.send(p, "guard.empty", String.valueOf(radius));
             return;
         }
         arena.setGuards(entries);
@@ -110,8 +110,8 @@ public class GuardSub implements SubCommand {
             }
         }
         plugin.arenas().saveAll();
-        Msg.send(p, "guard.recorded", "count", String.valueOf(entries.size()));
-        Msg.send(p, "guard.sync", "placed", String.valueOf(placed));
+        Msg.send(p, "guard.recorded", String.valueOf(entries.size()));
+        Msg.send(p, "guard.sync", String.valueOf(placed));
         if (skipped > 0) Msg.send(p, "guard.sync-skipped", "skipped", String.valueOf(skipped));
         Msg.send(p, "guard.replay-hint");
     }

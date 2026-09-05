@@ -517,8 +517,7 @@ public class GameListener implements Listener {
         arena.position(pending.position()).setBed(pending.team(), head.getLocation(), facing);
         plugin.arenas().saveAll();
         plugin.pendingBeds().remove(p.getUniqueId());
-        Msg.send(p, "setbed.done", "arena", arena.getName(),
-                "group", String.valueOf(pending.position()), "team", pending.team().display());
+        Msg.send(p, "setbed.done", arena.getName(), String.valueOf(pending.position()), pending.team().display());
     }
 
     // ------------------------------------------------------------------

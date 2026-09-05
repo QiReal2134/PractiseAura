@@ -38,7 +38,7 @@ public class ListSub implements SubCommand {
                     ? "使用中 " + arena.usedCount() + "/" + arena.positionsCount() + " 组"
                     : (arena.isReady() ? "就绪（" + arena.freePositionCount() + " 组可用）" : "未配置完");
             String hint = arena.isReady() ? "" : " (" + arena.missingHint() + ")";
-            Msg.send(sender, "list.arena-entry", "name", arena.getName(), "mode", arena.getType().display(), "status", status, "hint", hint);
+            Msg.send(sender, "list.arena-entry", arena.getName(), arena.getType().display(), status, hint);
         }
         Msg.send(sender, "list.games-header");
         if (plugin.games().active().isEmpty()) {
