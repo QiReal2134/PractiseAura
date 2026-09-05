@@ -1,8 +1,8 @@
 package dev.aura.practise;
 
-import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 
 import dev.aura.practise.board.ScoreboardService;
 import dev.aura.practise.command.CommandDispatcher;
@@ -52,10 +52,11 @@ public final class PractiseAuraPlugin extends JavaPlugin {
     private ScoreboardService boards;
     private LobbyMenu lobbyMenu;
     private Location lobby;
-    private final Map<UUID, PendingBed> pendingBeds = new HashMap<>();
-    private final Map<UUID, PendingSetting> pendingSettings = new HashMap<>();
-    private final Map<UUID, PendingDuel> duelInvites = new HashMap<>();
-    private final Map<UUID, Long> duelCooldowns = new HashMap<>();
+    // ConcurrentHashMap：pendingSettings 会被 AsyncChatEvent 的异步聊天线程读写
+    private final Map<UUID, PendingBed> pendingBeds = new ConcurrentHashMap<>();
+    private final Map<UUID, PendingSetting> pendingSettings = new ConcurrentHashMap<>();
+    private final Map<UUID, PendingDuel> duelInvites = new ConcurrentHashMap<>();
+    private final Map<UUID, Long> duelCooldowns = new ConcurrentHashMap<>();
 
     @Override
     public void onEnable() {
@@ -65,6 +66,7 @@ public final class PractiseAuraPlugin extends JavaPlugin {
         messages.load();
         dev.aura.practise.util.Msg.init(messages); // 消息系统最先就绪
         dev.aura.practise.mode.ModeRegistry.refresh(this); // 读取各模式的模式级开关
+        WorldCommand.loadRegistered(this); // 加载 worlds.yml 登记的自定义世界（先于竞技场）
         kitManager = new dev.aura.practise.manager.KitManager(this);
         kitManager.load(); // 先加载 kit（竞技场加载时可能做旧版 kit 迁移）
         arenaManager = new ArenaManager(this);
@@ -210,13 +212,35 @@ public final class PractiseAuraPlugin extends JavaPlugin {
         return gameManager.spectatorGameOf(p.getUniqueId()) != null;
     }
 
-    /** 玩家进出大厅/场内时调用，重算与所有人的互见关系 */
+    private boolean isGhostPlayer(Player p) {
+        dev.aura.practise.game.Game g = gameManager.gameOf(p.getUniqueId());
+        return g != null && g.isGhost(p.getUniqueId());
+    }
+
+    /**
+     * 玩家进出大厅/场内时调用，重算与所有人的互见关系。
+     * 这是全插件唯一的 show/hide 出口：幽灵状态在这里单独成档，
+     * 避免任意玩家的可见性刷新把重生等待中的幽灵重新暴露给别人。
+     */
     public void updateVisibility(Player p) {
         boolean pInGame = isGamePlayer(p);
+        boolean pGhost = isGhostPlayer(p);
         for (Player other : Bukkit.getOnlinePlayers()) {
             if (other.equals(p)) continue;
             boolean oInGame = isGamePlayer(other);
-            if (pInGame || oInGame) {
+            boolean oGhost = isGhostPlayer(other);
+            if (pGhost && oGhost) {
+                // 幽灵互相也看不见
+                p.hidePlayer(this, other);
+                other.hidePlayer(this, p);
+            } else if (pGhost) {
+                // 幽灵看得见别人，别人看不见幽灵
+                p.showPlayer(this, other);
+                other.hidePlayer(this, p);
+            } else if (oGhost) {
+                p.hidePlayer(this, other);
+                other.showPlayer(this, p);
+            } else if (pInGame || oInGame) {
                 // 至少一方在场内：互相可见（大厅玩家本来也不在场边）
                 p.showPlayer(this, other);
                 other.showPlayer(this, p);

@@ -48,6 +48,7 @@ public class SetBuildSub implements SubCommand {
             Msg.send(p, "error.arena-missing", "arena", args[1]);
             return;
         }
+        if (plugin.games().arenaInUse(arena)) Msg.send(p, "setup.in-use-hint");
         int index;
         switch (args[2].toLowerCase(Locale.ROOT)) {
             case "pos1", "1" -> index = 1;

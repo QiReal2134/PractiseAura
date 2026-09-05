@@ -39,11 +39,17 @@ public class DeleteSub implements SubCommand {
             Msg.send(sender, "delete.usage");
             return;
         }
-        if (plugin.arenas().delete(args[1])) {
-            Msg.send(sender, "delete.success", "name", args[1]);
-        } else {
+        Arena arena = plugin.arenas().get(args[1]);
+        if (arena == null) {
             Msg.send(sender, "error.arena-missing", "arena", args[1]);
+            return;
         }
+        if (plugin.games().arenaInUse(arena)) {
+            Msg.send(sender, "delete.in-use", "arena", arena.getName());
+            return;
+        }
+        plugin.arenas().delete(args[1]);
+        Msg.send(sender, "delete.success", "name", args[1]);
     }
 
     @Override

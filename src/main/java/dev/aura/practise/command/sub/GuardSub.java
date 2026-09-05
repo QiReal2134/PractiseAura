@@ -56,6 +56,7 @@ public class GuardSub implements SubCommand {
             Msg.send(p, "error.arena-missing", "arena", args[1]);
             return;
         }
+        if (plugin.games().arenaInUse(arena)) Msg.send(p, "setup.in-use-hint");
         if (args[2].equalsIgnoreCase("clear")) {
             arena.clearGuards();
             plugin.arenas().saveAll();

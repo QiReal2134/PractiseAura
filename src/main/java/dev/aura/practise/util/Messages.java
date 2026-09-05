@@ -133,6 +133,7 @@ public class Messages {
         d.put("duel.accept-no-arena", "&c{player} 接受了约战，但没有空闲竞技场");
         // 管理：竞技场
         d.put("setup.usage", "&7用法: /pa setup <名字>");
+        d.put("setup.in-use-hint", "&7提示: 该竞技场有进行中的对局，本次修改对下一局生效");
         d.put("setup.lobby-set", "&7已把当前位置设为大厅出生点");
         d.put("setup.kit-hint", "&7kit 为按模式设置: /pa kit <模式> [clear]（对该模式所有竞技场生效）");
         d.put("setup.positions", "&7点位组数: {count}（同图可并发 {count} 场；setspawn/setbed 可带组号）");
@@ -144,6 +145,7 @@ public class Messages {
         d.put("create.hint", "&7下一步: 输入 /pa setup {name} 打开可视化配置菜单（点击即可执行）");
         d.put("delete.usage", "&7用法: /pa delete <名字>");
         d.put("delete.success", "&7已删除竞技场 {name}");
+        d.put("delete.in-use", "&c竞技场 {arena} 有未结束的对局，等比赛结束再删除");
         d.put("setspawn.usage", "&7用法: /pa setspawn <名字> <red|blue> [组号]（站在出生点执行）");
         d.put("setspawn.bad-team", "&c队伍只能填 red 或 blue");
         d.put("setspawn.success", "&7已把当前位置设为 {arena} 第 {group} 组 {team} 出生点");
@@ -211,6 +213,7 @@ public class Messages {
         d.put("world.teleported", "&7已传送到世界 {name}");
         d.put("world.delete-usage", "&7用法: /world delete <名>");
         d.put("world.delete-protected", "&c不能删除主世界");
+        d.put("world.delete-in-use", "&c世界 {world} 有未结束的对局，无法删除");
         d.put("world.delete-fail", "&c世界卸载失败（可能有插件占用）");
         d.put("world.deleted", "&7世界 {name} 已卸载并删除");
         d.put("world.delete-folder-fail", "&c世界已卸载，但文件夹删除失败: {error}");

@@ -190,6 +190,7 @@ public class Game {
         Team team = players.remove(p.getUniqueId());
         if (team == null) return;
         alive.remove(p.getUniqueId());
+        cancelGhost(p.getUniqueId()); // 幽灵退出：立即还原状态，别等重生任务下一拍（掉线时药水会被写进玩家数据）
         broadcast(reasonKey, "name", p.getName());
         if (state == GameState.STARTING) {
             if (matchCountdown) {
@@ -476,6 +477,7 @@ public class Game {
 
     public void handleDeath(Player victim) {
         if (state != GameState.RUNNING) return;
+        if (!players.containsKey(victim.getUniqueId())) return; // 死亡到结算的 1 tick 里已退出：leave() 已广播并 checkEnd 过
         alive.remove(victim.getUniqueId());
         Player killer = victim.getKiller();
         if (killer == null) killer = recentAttacker(victim); // 虚空/环境死亡也归属击杀
@@ -644,6 +646,9 @@ public class Game {
     private void cleanup() {
         cancelGhosts();
         dismissSpectators();
+        // 先注销（清掉 byPlayer）再逐个回大厅：resetToLobby 里的 updateVisibility
+        // 才会按"大厅玩家"重算，否则前对手之间会保持互相可见、打破大厅互隐
+        plugin.games().unregister(this);
         for (UUID id : new ArrayList<>(players.keySet())) {
             players.remove(id);
             Player p = Bukkit.getPlayer(id);
@@ -653,7 +658,6 @@ public class Game {
         kills.clear();
         arena.releasePosition(position);
         onEnd();
-        plugin.games().unregister(this);
     }
 
     /** 空场解散（等待中没人了） */
@@ -680,6 +684,7 @@ public class Game {
         removeBar();
         cancelGhosts();
         dismissSpectators();
+        plugin.games().unregister(this); // 与 cleanup 相同：先注销再按大厅身份重算可见性
         for (UUID id : new ArrayList<>(players.keySet())) {
             players.remove(id);
             Player p = Bukkit.getPlayer(id);
@@ -687,7 +692,6 @@ public class Game {
         }
         arena.releasePosition(position);
         onEnd();
-        plugin.games().unregister(this);
     }
 
     public void resetToLobby(Player p) {
@@ -865,7 +869,7 @@ public class Game {
         p.setAllowFlight(true);
         p.setFlying(true);
         p.setCollidable(false); // 无碰撞箱：其他玩家碰不到
-        hideGhost(p);           // 对其他玩家隐藏实体：真正打不到
+        plugin.updateVisibility(p); // 幽灵对所有玩家隐藏（可见性唯一出口，别的玩家刷新也不会暴露）
         int wait = plugin.settings().respawnSeconds();
         UUID id = p.getUniqueId();
         ghostTasks.put(id, new BukkitRunnable() {
@@ -903,19 +907,22 @@ public class Game {
         p.setAllowFlight(false);
         p.setCollidable(true);
         p.setFallDistance(0f);
-        unhideGhost(p);
+        // 不再对所有人 showPlayer（会覆盖大厅互隐），按当前身份整体重算
+        plugin.updateVisibility(p);
     }
 
-    /** 幽灵对所有其他玩家隐藏实体（隐身药水不隐藏命中框，隐藏实体才能真正做到打不到） */
-    private void hideGhost(Player ghost) {
-        for (Player other : Bukkit.getOnlinePlayers()) {
-            if (!other.equals(ghost)) other.hidePlayer(plugin, ghost);
-        }
-    }
-
-    private void unhideGhost(Player ghost) {
-        for (Player other : Bukkit.getOnlinePlayers()) {
-            other.showPlayer(plugin, ghost);
+    /** 立即清除某个玩家的幽灵状态（退出/掉线时用，不等重生倒计时任务） */
+    private void cancelGhost(UUID id) {
+        BukkitTask task = ghostTasks.remove(id);
+        if (task != null) task.cancel();
+        if (ghosts.remove(id)) {
+            Player p = Bukkit.getPlayer(id);
+            if (p != null && p.isOnline()) {
+                p.removePotionEffect(PotionEffectType.INVISIBILITY);
+                p.setFlying(false);
+                p.setAllowFlight(false);
+                p.setCollidable(true);
+            }
         }
     }
 
@@ -933,7 +940,7 @@ public class Game {
                 p.setFlying(false);
                 p.setAllowFlight(false);
                 p.setCollidable(true);
-                unhideGhost(p);
+                plugin.updateVisibility(p);
             }
         }
     }

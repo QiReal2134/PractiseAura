@@ -94,22 +94,22 @@ public class GameListener implements Listener {
         plugin.pendingSettings().remove(p.getUniqueId());
         plugin.lobbyMenu().lastGame().remove(p.getUniqueId());
         plugin.duelInvites().remove(p.getUniqueId()); // 以该玩家为目标的约战邀请
+        plugin.duelCooldowns().remove(p.getUniqueId());
     }
 
-    /** 聊天输入模式：玩家点击设置项后，下一条聊天消息作为数值 */
+    /** 聊天输入模式：玩家点击设置项后，下一条聊天消息作为数值（本事件在异步聊天线程触发） */
     @EventHandler
     public void onChat(AsyncChatEvent e) {
         Player p = e.getPlayer();
-        PendingSetting pending = plugin.pendingSettings().get(p.getUniqueId());
+        // remove 是原子操作：返回 null 说明没有待输入项（或已被主线程取消/过期清理），聊天放行
+        PendingSetting pending = plugin.pendingSettings().remove(p.getUniqueId());
         if (pending == null) return;
         e.setCancelled(true);
         if (pending.expired()) {
-            plugin.pendingSettings().remove(p.getUniqueId());
             Msg.send(p, "setting.input-expired");
             return;
         }
         String text = PlainTextComponentSerializer.plainText().serialize(e.message()).trim();
-        plugin.pendingSettings().remove(p.getUniqueId());
         plugin.getServer().getScheduler().runTask(plugin, () ->
                 SettingSub.apply(plugin, p, pending.key(), text));
     }

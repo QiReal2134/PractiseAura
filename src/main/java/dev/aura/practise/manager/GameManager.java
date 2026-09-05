@@ -117,6 +117,31 @@ public class GameManager {
         return null;
     }
 
+    /** 该竞技场是否有未结束的对局（/pa delete 前守卫） */
+    public boolean arenaInUse(Arena arena) {
+        for (Game game : games) {
+            if (game.arena() == arena && game.state() != GameState.ENDING) return true;
+        }
+        return false;
+    }
+
+    /** 该世界是否有未结束的对局（/world delete 前守卫） */
+    public boolean worldInUse(String worldName) {
+        if (worldName == null) return false;
+        for (Game game : games) {
+            if (game.state() == GameState.ENDING) continue;
+            Location red = game.spawn(dev.aura.practise.game.Team.RED);
+            Location blue = game.spawn(dev.aura.practise.game.Team.BLUE);
+            if (red != null && worldName.equals(red.getWorld() == null ? null : red.getWorld().getName())) {
+                return true;
+            }
+            if (blue != null && worldName.equals(blue.getWorld() == null ? null : blue.getWorld().getName())) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     /** /pa duel 接受后：直接把两人放进一场新游戏（邀请者红队，受邀者蓝队） */
     public boolean startDuel(Player a, Player b, ModeHandler mode, int rounds) {
         if (byPlayer.containsKey(a.getUniqueId()) || byPlayer.containsKey(b.getUniqueId())) {

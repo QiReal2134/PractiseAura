@@ -49,6 +49,7 @@ public class SetBedSub implements SubCommand {
             Msg.send(p, "error.arena-missing", "arena", args[1]);
             return;
         }
+        if (plugin.games().arenaInUse(arena)) Msg.send(p, "setup.in-use-hint");
         Team team = Team.parse(args[2]);
         if (team == null) {
             Msg.send(p, "setspawn.bad-team");
