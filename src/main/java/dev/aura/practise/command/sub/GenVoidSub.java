@@ -72,8 +72,9 @@ public class GenVoidSub implements SubCommand {
         buildIsland(world, -DISTANCE, mode, Team.RED, pos);
         buildIsland(world, DISTANCE, mode, Team.BLUE, pos);
         plugin.arenas().saveAll();
-        Msg.send(sender, "虚空地图已生成: " + arena.getName()
-                + "（两岛位于 " + world.getName() + " 的 X=-" + DISTANCE + "/+" + DISTANCE + "，Y=" + HEIGHT + "）");
+        Msg.send(sender, "genvoid.success",
+                "name", arena.getName(), "world", world.getName(),
+                "distance", String.valueOf(DISTANCE), "height", String.valueOf(HEIGHT));
         Msg.send(sender, "genvoid.hint");
         if (sender instanceof Player p) {
             p.teleport(pos.spawn(Team.RED));
@@ -107,5 +108,15 @@ public class GenVoidSub implements SubCommand {
         Location spawn = new Location(world, cx + (red ? 2 : -2), HEIGHT + 1, 0,
                 red ? -90f : 90f, 0f); // -90=朝东(+X)，90=朝西(-X)
         pos.setSpawn(team, spawn);
+    }
+
+    @Override
+    public List<String> tab(PractiseAuraPlugin plugin, CommandSender sender, String[] args) {
+        if (args.length == 3) { // /pa genvoid <名> <世界名>
+            List<String> out = new ArrayList<>();
+            for (org.bukkit.World world : Bukkit.getWorlds()) out.add(world.getName());
+            return out;
+        }
+        return List.of();
     }
 }

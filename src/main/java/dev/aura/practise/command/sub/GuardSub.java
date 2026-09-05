@@ -94,12 +94,13 @@ public class GuardSub implements SubCommand {
             return;
         }
         arena.setGuards(entries);
-        // 立即同步到蓝床（占用位置跳过）
+        // 立即同步到蓝床（按两床朝向镜像变换，占用位置跳过）
         Location blue = pos.bedHead(Team.BLUE);
         int placed = 0;
         int skipped = 0;
         for (Arena.GuardEntry entry : entries) {
-            Block target = blue.getBlock().getRelative(entry.dx(), entry.dy(), entry.dz());
+            Arena.GuardEntry be = arena.entryForBlue(entry);
+            Block target = blue.getBlock().getRelative(be.dx(), be.dy(), be.dz());
             if (target.getType().isAir() || CmdUtil.isLiquid(target.getType())) {
                 target.setBlockData(Bukkit.createBlockData(entry.data()));
                 placed++;

@@ -34,6 +34,12 @@ public class FireballFightMode implements ModeHandler {
         return settings;
     }
 
+    /** 火球模式一条命：死亡即淘汰（床仍可拆，作为削弱手段） */
+    @Override
+    public boolean respawnOnDeath() {
+        return false;
+    }
+
     @Override
     public String id() {
         return "fireballfight";

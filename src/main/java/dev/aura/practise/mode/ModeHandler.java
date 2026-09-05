@@ -25,6 +25,11 @@ public interface ModeHandler {
         return settings().isNeedsBeds();
     }
 
+    /** 死亡后是否重生（床在的前提下）。false = 一条命，死亡即淘汰 */
+    default boolean respawnOnDeath() {
+        return needsBeds();
+    }
+
     /** 模式级开关（有床/围床/伤害/PVP/破坏规则/虚空处死等，可用 /pa mode 修改） */
     ModeSettings settings();
 

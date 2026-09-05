@@ -502,9 +502,11 @@ public class Game {
 
     protected void checkEnd() {
         if (state != GameState.RUNNING) return;
-        // 床还在且队员未退场 → 死了也会重生，不算被淘汰
-        boolean redOut = aliveCount(Team.RED) == 0 && (!bedAlive(Team.RED) || teamCount(Team.RED) == 0);
-        boolean blueOut = aliveCount(Team.BLUE) == 0 && (!bedAlive(Team.BLUE) || teamCount(Team.BLUE) == 0);
+        // 一队"无人存活且死了回不来"（床没了/模式一条命）才算被淘汰
+        boolean redCanComeBack = mode.respawnOnDeath() && bedAlive(Team.RED);
+        boolean blueCanComeBack = mode.respawnOnDeath() && bedAlive(Team.BLUE);
+        boolean redOut = aliveCount(Team.RED) == 0 && (!redCanComeBack || teamCount(Team.RED) == 0);
+        boolean blueOut = aliveCount(Team.BLUE) == 0 && (!blueCanComeBack || teamCount(Team.BLUE) == 0);
         if (redOut && blueOut) end(null);
         else if (redOut) end(Team.BLUE);
         else if (blueOut) end(Team.RED);
@@ -750,10 +752,10 @@ public class Game {
         return bedAlive.getOrDefault(team, false);
     }
 
-    /** 床在则死亡重生，床没了死亡即淘汰 */
+    /** 床在且模式允许重生则死亡重生，否则死亡即淘汰 */
     public boolean shouldRespawn(Player p) {
         Team team = teamOf(p.getUniqueId());
-        return team != null && bedAlive(team);
+        return team != null && mode.respawnOnDeath() && bedAlive(team);
     }
 
     protected void restoreBeds() {
@@ -826,7 +828,7 @@ public class Game {
         return guardBlocks.contains(block.getLocation());
     }
 
-    /** 把记录的围床结构放到两张床周围（每局开始/结束调用），本局内这些方块可拆可炸 */
+    /** 把记录的围床结构放到两张床周围（每局开始/结束调用；蓝床按朝向镜像），本局内这些方块可拆可炸 */
     private void placeGuards() {
         guardBlocks.clear();
         if (!mode.settings().isNeedsGuard() || arena.getGuardEntries().isEmpty()) return;
@@ -834,8 +836,9 @@ public class Game {
             Location head = pos().bedHead(team);
             if (head == null) continue;
             for (Arena.GuardEntry entry : arena.getGuardEntries()) {
-                Block block = head.clone().add(entry.dx(), entry.dy(), entry.dz()).getBlock();
-                block.setBlockData(Bukkit.createBlockData(entry.data()));
+                Arena.GuardEntry e = team == Team.BLUE ? arena.entryForBlue(entry) : entry;
+                Block block = head.clone().add(e.dx(), e.dy(), e.dz()).getBlock();
+                block.setBlockData(Bukkit.createBlockData(e.data()));
                 guardBlocks.add(block.getLocation());
             }
         }

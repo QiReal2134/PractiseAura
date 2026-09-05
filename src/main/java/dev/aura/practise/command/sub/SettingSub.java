@@ -170,6 +170,12 @@ public class SettingSub implements SubCommand {
     @Override
     public List<String> tab(PractiseAuraPlugin plugin, CommandSender sender, String[] args) {
         if (args.length == 2) return new ArrayList<>(CYCLES.keySet());
+        if (args.length == 3) {
+            String key = args[1].toLowerCase(Locale.ROOT);
+            List<String> out = new ArrayList<>(CYCLES.getOrDefault(key, List.of()));
+            if (!out.isEmpty()) { out.add("next"); out.add("input"); }
+            return out;
+        }
         return List.of();
     }
 }

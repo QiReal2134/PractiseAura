@@ -81,6 +81,7 @@ public class CommandDispatcher implements CommandExecutor, TabCompleter {
             for (SubCommand sub : distinct()) {
                 if (!visible(sender, sub)) continue;
                 out.add(sub.name());
+                out.addAll(sub.aliases()); // 别名（如 arenas/lobby）也参与补全
             }
             return filter(out, args.length == 0 ? "" : args[0]);
         }

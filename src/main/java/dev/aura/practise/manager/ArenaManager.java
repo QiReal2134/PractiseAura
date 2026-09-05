@@ -44,6 +44,12 @@ public class ArenaManager {
                             arena.getKitLeggings(), arena.getKitBoots()));
                     arena.clearKit();
                 }
+                // 世界缺失会让出生点读不到（常见于世界文件夹被删/未加载），启动时明确提示
+                String worldName = arena.worldName();
+                if (worldName != null && org.bukkit.Bukkit.getWorld(worldName) == null) {
+                    plugin.getLogger().warning("竞技场 " + name + " 所在的世界 " + worldName
+                            + " 未加载或不存在，该场暂时不可用（重建世界后重启即可恢复）");
+                }
             }
         }
         plugin.getLogger().info("已加载 " + arenas.size() + " 个竞技场");

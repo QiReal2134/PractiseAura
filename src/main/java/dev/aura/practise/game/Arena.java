@@ -9,6 +9,7 @@ import dev.aura.practise.mode.ModeHandler;
 import dev.aura.practise.mode.ModeRegistry;
 import dev.aura.practise.util.LocUtil;
 import org.bukkit.Location;
+import org.bukkit.block.BlockFace;
 import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.inventory.ItemStack;
 
@@ -160,6 +161,26 @@ public class Arena {
 
     public List<GuardEntry> getGuardEntries() {
         return guardEntries;
+    }
+
+    /**
+     * 把相对红床记录的围床偏移变换到蓝床坐标系。
+     * 两床朝向相反时自动镜像（红床靠后侧的墙 → 蓝床靠后侧的墙），
+     * 朝向相同或无法确定时原样返回。
+     */
+    public GuardEntry entryForBlue(GuardEntry e) {
+        ArenaPosition pos = positions.get(0);
+        BlockFace f1 = pos.bedFacing(Team.RED);
+        BlockFace f2 = pos.bedFacing(Team.BLUE);
+        if (f1 == null || f2 == null || f2 != f1.getOppositeFace()) return e;
+        int sx = -f1.getModZ(), sz = f1.getModX(); // 侧轴 = 朝向旋转 90°
+        int forward = e.dx() * f1.getModX() + e.dz() * f1.getModZ();
+        int side = e.dx() * sx + e.dz() * sz;
+        return new GuardEntry(
+                f2.getModX() * forward + sx * side,
+                e.dy(),
+                f2.getModZ() * forward + sz * side,
+                e.data());
     }
 
     // ------------------------------------------------------------------
