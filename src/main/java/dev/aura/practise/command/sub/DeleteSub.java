@@ -6,6 +6,7 @@ import java.util.List;
 import dev.aura.practise.PractiseAuraPlugin;
 import dev.aura.practise.command.CmdUtil;
 import dev.aura.practise.command.SubCommand;
+import dev.aura.practise.game.Arena;
 import dev.aura.practise.util.Msg;
 import org.bukkit.command.CommandSender;
 

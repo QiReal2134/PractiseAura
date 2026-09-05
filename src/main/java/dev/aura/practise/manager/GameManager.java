@@ -12,6 +12,7 @@ import dev.aura.practise.game.Game;
 import dev.aura.practise.game.GameState;
 import dev.aura.practise.mode.ModeHandler;
 import dev.aura.practise.util.Msg;
+import org.bukkit.Location;
 import org.bukkit.entity.Player;
 
 public class GameManager {

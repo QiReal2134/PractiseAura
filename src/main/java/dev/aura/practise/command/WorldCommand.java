@@ -63,7 +63,10 @@ public class WorldCommand implements CommandExecutor, TabCompleter {
                 default -> {
                 }
             }
-            Bukkit.createWorld(creator);
+            World loaded = Bukkit.createWorld(creator);
+            if (loaded != null && type.equals("void")) {
+                prepareVoidWorld(loaded); // 文件夹可能从未落盘（空区块不保存），补平台并落盘
+            }
             plugin.getLogger().info("已加载世界 " + name + " (" + type + ")");
         }
     }
@@ -81,6 +84,20 @@ public class WorldCommand implements CommandExecutor, TabCompleter {
         } catch (IOException ex) {
             plugin.getLogger().severe("保存 worlds.yml 失败: " + ex.getMessage());
         }
+    }
+
+    /**
+     * 虚空世界落盘保障：全空区块不会被 Paper 序列化，世界文件夹可能根本不写盘，
+     * 重启即丢。这里强制铺出生平台并立刻 save，确保 level.dat/region 落地。
+     */
+    private static void prepareVoidWorld(World world) {
+        for (int x = -3; x <= 3; x++) {
+            for (int z = -3; z <= 3; z++) {
+                world.getBlockAt(x, 99, z).setType(Material.QUARTZ_BLOCK);
+            }
+        }
+        world.setSpawnLocation(0, 100, 0);
+        world.save();
     }
 
     @Override
@@ -152,13 +169,7 @@ public class WorldCommand implements CommandExecutor, TabCompleter {
         }
         register(plugin, name, type); // 登记，重启后自动加载
         if (type.equals("void")) {
-            // 虚空世界没有地面：在出生点铺一个小平台防止掉虚空
-            for (int x = -3; x <= 3; x++) {
-                for (int z = -3; z <= 3; z++) {
-                    world.getBlockAt(x, 99, z).setType(Material.QUARTZ_BLOCK);
-                }
-            }
-            world.setSpawnLocation(0, 100, 0);
+            prepareVoidWorld(world);
         }
         Msg.send(sender, "world.created", "name", name, "type", type);
         if (sender instanceof Player p) {
