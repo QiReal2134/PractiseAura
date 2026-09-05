@@ -172,10 +172,14 @@ public class Messages {
         d.put("genvoid.success", "&7虚空地图已生成: {name}（两岛位于 {world} 的 X=-{distance}/+{distance}，Y={height}）");
         d.put("genvoid.hint", "&7出生点与床已自动配置，/pa list 确认就绪即可开玩；记得设置 /pa setlobby");
         d.put("genvoid.teleported", "&7已传送到地图");
-        d.put("kit.usage", "&7用法: /pa kit <模式> [clear]");
+        d.put("kit.usage", "&7用法: /pa kit <模式> [clear|forget <玩家>]");
         d.put("kit.saved", "&7已把当前背包+盔甲存为 {mode} 的 kit");
         d.put("kit.shared", "&7该模式所有竞技场共用此 kit；羊毛/皮革发放时会自动变成队伍颜色");
         d.put("kit.cleared", "&7已清除 {mode} 的 kit，恢复默认");
+        d.put("kit.personal-saved", "&a已记录你对 {mode} kit 的调整，下次对局自动使用");
+        d.put("kit.forget-usage", "&7用法: /pa kit <模式> forget <玩家>");
+        d.put("kit.forgot", "&7已清除 &f{player} &7在 {mode} 的个人 kit，恢复跟随模式 kit");
+        d.put("kit.forgot-none", "&f{player} &7在 {mode} 没有个人 kit");
         // 设置 / 模式开关
         d.put("setting.keys", "&7可设置项: {keys}");
         d.put("setting.usage", "&7用法: /pa setting <key> [值|next|input]");

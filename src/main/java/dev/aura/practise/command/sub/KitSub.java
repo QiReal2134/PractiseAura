@@ -28,7 +28,7 @@ public class KitSub implements SubCommand {
 
     @Override
     public String params() {
-        return "<模式> [clear]";
+        return "<模式> [clear|forget <玩家>]";
     }
 
     @Override
@@ -55,6 +55,20 @@ public class KitSub implements SubCommand {
             Msg.send(p, "kit.cleared", "mode", mode.display());
             return;
         }
+        if (args.length >= 3 && args[2].equalsIgnoreCase("forget")) {
+            // /pa kit <模式> forget <玩家>：清除该玩家的个人 kit，恢复跟随模式 kit
+            if (args.length < 4) {
+                Msg.send(p, "kit.forget-usage");
+                return;
+            }
+            org.bukkit.OfflinePlayer target = org.bukkit.Bukkit.getOfflinePlayer(args[3]);
+            if (plugin.playerKits().clear(target.getUniqueId(), mode.id())) {
+                Msg.send(p, "kit.forgot", "player", args[3], "mode", mode.display());
+            } else {
+                Msg.send(p, "kit.forgot-none", "player", args[3], "mode", mode.display());
+            }
+            return;
+        }
         org.bukkit.inventory.PlayerInventory inv = p.getInventory();
         plugin.kits().set(mode.id(), new dev.aura.practise.manager.KitManager.Kit(
                 new ArrayList<>(Arrays.asList(inv.getStorageContents())),
@@ -70,7 +84,12 @@ public class KitSub implements SubCommand {
             for (ModeHandler mode : ModeRegistry.all()) out.add(mode.id());
             return out;
         }
-        if (args.length == 3) return List.of("clear");
+        if (args.length == 3) return List.of("clear", "forget");
+        if (args.length == 4 && args[2].equalsIgnoreCase("forget")) {
+            List<String> out = new ArrayList<>();
+            for (Player online : plugin.getServer().getOnlinePlayers()) out.add(online.getName());
+            return out;
+        }
         return List.of();
     }
 }
