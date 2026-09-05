@@ -1,0 +1,33 @@
+name: PractiseAura
+version: 1.0.0
+main: dev.aura.practise.PractiseAuraPlugin
+api-version: '26.2'
+authors: [Qireal]
+description: Practice core - BedFight / FireBallFight
+
+commands:
+  practise:
+    description: PractiseAura 主命令
+    usage: /pa help
+    aliases: [pa, aura]
+  bedfight:
+    description: 加入 BedFight
+    usage: /bedfight
+  fireballfight:
+    description: 加入 FireBallFight
+    usage: /fireballfight
+  duel:
+    description: 约战
+    usage: /duel <玩家> [模式] [回合数]
+  hub:
+    description: 回到大厅
+    usage: /hub
+    aliases: [lobby]
+  world:
+    description: 世界管理（list/create/tp/delete）
+    usage: /world help
+
+permissions:
+  practiseaura.admin:
+    description: 管理员权限（创建/编辑竞技场）
+    default: op

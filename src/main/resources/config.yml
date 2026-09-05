@@ -1,0 +1,45 @@
+# PractiseAura 配置
+# 大厅出生点请进服后用 /pa setlobby 设置
+
+settings:
+  # 每队人数（1=1v1，2=2v2，最大 4v4；满员自动开局）
+  team-size: 1
+  # 默认回合数（1 = 单局；duel 命令可单独指定更多局）
+  rounds: 1
+  # 多局制局间倒计时秒数
+  round-countdown-seconds: 3
+  # 约战邀请有效期（秒）
+  duel-invite-seconds: 30
+  # 约战发送冷却（秒），0 = 无冷却
+  duel-cooldown-seconds: 10
+  # 击杀归属窗口（秒）：死亡前这么久内打过人会计入击杀，0 = 不归属
+  kill-credit-window-seconds: 8
+  # 图腾特效时长（秒）与图标缩放
+  totem-duration-seconds: 2.5
+  totem-scale: 1.8
+  # 人齐后倒计时秒数
+  countdown-seconds: 5
+  # 默认 kit 的守家羊毛数量（自动按队伍颜色发羊毛）
+  kit-blocks: 24
+  # /pa guard ready 记录围床结构时扫描红床周围几格
+  guard-scan-radius: 4
+  # 重生等待秒数：死亡后以幽灵状态等待（隐身无粒子+无敌+可飞行+不可攻击破坏），0=立即重生
+  respawn-seconds: 3
+  # 虚空处死：低于本队出生点 Y 轴多少格即死亡，0=关闭
+  void-below-spawn: 12
+  # 是否在 help / Tab 补全中显示管理命令（false=隐藏，输入完整命令仍可执行）
+  show-admin-commands: false
+  # 火球参数（爆炸由插件接管：自己只吃击退不掉血，队友免疫）
+  fireball-power-x: 1.6   # 水平击退威力
+  fireball-power-y: 0.8   # 垂直击退威力
+  fireball-damage: 4.0    # 对敌人的伤害
+  fireball-radius: 2.5    # 爆炸影响半径
+  # 低于本队出生点 Y 多少格以下禁止放方块（防虚空搭路自救），0=不限制
+  place-limit-below-spawn: 12
+  # 重生/开局保护秒数（保护期内免伤，主动攻击会打破保护），0=关闭
+  spawn-protection-seconds: 2
+  # 火球发射冷却秒数，0=无冷却
+  fireball-cooldown-seconds: 1.5
+  # 等待区菜单物品 / 快速加入上次游戏的物品
+  lobby-item: IRON_SWORD
+  rejoin-item: PAPER

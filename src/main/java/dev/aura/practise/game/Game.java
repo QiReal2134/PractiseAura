@@ -1,0 +1,1278 @@
+package dev.aura.practise.game;
+
+import java.util.ArrayList;
+import java.util.EnumMap;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.UUID;
+
+import dev.aura.practise.PractiseAuraPlugin;
+import dev.aura.practise.mode.ModeHandler;
+import dev.aura.practise.mode.ModeSettings;
+import dev.aura.practise.manager.KitManager;
+import dev.aura.practise.util.LocUtil;
+import dev.aura.practise.util.Msg;
+import net.kyori.adventure.text.format.NamedTextColor;
+import org.bukkit.Bukkit;
+import org.bukkit.GameMode;
+import org.bukkit.Location;
+import org.bukkit.Material;
+import org.bukkit.Particle;
+import org.bukkit.Sound;
+import org.bukkit.block.Block;
+import org.bukkit.block.BlockFace;
+import org.bukkit.block.data.type.Bed;
+import org.bukkit.entity.Display;
+import org.bukkit.entity.ItemDisplay;
+import org.bukkit.entity.Player;
+import org.bukkit.inventory.ItemStack;
+import org.bukkit.inventory.PlayerInventory;
+import org.bukkit.inventory.meta.LeatherArmorMeta;
+import org.bukkit.potion.PotionEffect;
+import org.bukkit.potion.PotionEffectType;
+import org.bukkit.scheduler.BukkitRunnable;
+import org.bukkit.scheduler.BukkitTask;
+
+/**
+ * 一场进行中的游戏（当前固定 1v1，红蓝两队）。
+ * 模式行为全部委托给 {@link ModeHandler}；地图数据来自 Arena 的某一组点位。
+ * 职责：排队与倒计时、开局发装、床（目标方块）、围床结构、虚空处死、
+ * 重生等待（幽灵状态）、个人 kit 快照、结算与回滚。
+ */
+public class Game {
+
+    private final PractiseAuraPlugin plugin;
+    private final Arena arena;
+    private final ModeHandler mode;
+    /** 占用的点位（0-based，指向 arena 的第 position+1 组） */
+    private final int position;
+
+    private final Map<UUID, Team> players = new LinkedHashMap<>();
+    private final Set<UUID> alive = new HashSet<>();
+    private final Map<UUID, Integer> kills = new HashMap<>();
+    private final Map<Team, Boolean> bedAlive = new EnumMap<>(Team.class);
+    private final BlockTracker tracker = new BlockTracker();
+    private final Set<Location> guardBlocks = new HashSet<>();
+    private final Set<UUID> ghosts = new HashSet<>();
+    private final Map<UUID, BukkitTask> ghostTasks = new HashMap<>();
+    private final Set<UUID> spectators = new HashSet<>();
+    /** 本局内玩家死亡时快照的背包（自动保存个人 kit 调整，不影响他人） */
+    private final Map<UUID, PersonalKit> personalKits = new HashMap<>();
+    private final Map<UUID, Long> protectionUntil = new HashMap<>();
+    /** 最近攻击者记录：虚空/环境死亡时把击杀归属给 8 秒内打过你的人 */
+    private final Map<UUID, UUID> lastAttacker = new HashMap<>();
+    private final Map<UUID, Long> lastAttackTime = new HashMap<>();
+
+    /** 监听器在成功的玩家间伤害后调用（含 0 伤害的拳击） */
+    public void setLastAttacker(Player victim, Player attacker) {
+        lastAttacker.put(victim.getUniqueId(), attacker.getUniqueId());
+        lastAttackTime.put(victim.getUniqueId(), System.currentTimeMillis());
+    }
+
+    /** 击杀归属窗口内打过 victim 的人（没有则 null） */
+    private Player recentAttacker(Player victim) {
+        UUID attackerId = lastAttacker.get(victim.getUniqueId());
+        Long time = lastAttackTime.get(victim.getUniqueId());
+        if (attackerId == null || time == null) return null;
+        long window = plugin.settings().killCreditWindowSeconds() * 1000L;
+        if (window <= 0 || System.currentTimeMillis() - time > window) return null;
+        Player attacker = Bukkit.getPlayer(attackerId);
+        return attacker != null && isParticipant(attackerId) ? attacker : null;
+    }
+
+    private GameState state = GameState.WAITING;
+    private int teamSize;
+    private int countdownSeconds;
+    private BukkitTask countdownTask;
+    private BukkitTask tickTask;
+    private org.bukkit.boss.BossBar countdownBar;
+    /** true = 首次匹配的排队倒计时；false = 多局制的局间倒计时 */
+    private boolean matchCountdown = true;
+
+    // 回合制
+    private int roundsTotal = 1;
+    private int roundsPlayed = 0;
+    private int roundsCurrent = 1;
+    private final Map<Team, Integer> roundWins = new EnumMap<>(Team.class);
+
+    public Game(PractiseAuraPlugin plugin, Arena arena, ModeHandler mode, int position) {
+        this.plugin = plugin;
+        this.arena = arena;
+        this.mode = mode;
+        this.position = position;
+        this.arena.reservePosition(position);
+        this.teamSize = Math.max(1, plugin.settings().teamSize());
+        for (Team team : Team.values()) {
+            bedAlive.put(team, true);
+        }
+    }
+
+    /** 每队人数（1v1 / 2v2...），总人数 = teamSize * 2；duel 固定 1v1 */
+    public void setTeamSize(int size) {
+        this.teamSize = Math.max(1, Math.min(4, size));
+    }
+
+    /** 本局需要的总人数 */
+    public int maxPlayers() {
+        return teamSize * 2;
+    }
+
+    public PractiseAuraPlugin plugin() {
+        return plugin;
+    }
+
+    public Arena arena() {
+        return arena;
+    }
+
+    public ModeHandler mode() {
+        return mode;
+    }
+
+    /** 本局占用的点位（0-based） */
+    public int position() {
+        return position;
+    }
+
+    public GameState state() {
+        return state;
+    }
+
+    /** 当前倒计时是否为首次匹配排队倒计时（false = 多局制局间倒计时） */
+    public boolean isMatchCountdown() {
+        return matchCountdown;
+    }
+
+    /** 设置回合数（1 = 单局；2/3 = 先过半胜，必须在开局前调用） */
+    public void setRounds(int rounds) {
+        this.roundsTotal = Math.max(1, Math.min(5, rounds));
+    }
+
+    private ArenaPosition pos() {
+        return arena.position(position + 1);
+    }
+
+    /** 本局点位中某队的出生点 */
+    public Location spawn(Team team) {
+        return pos().spawn(team);
+    }
+
+    /** 本局点位中某队出生点的 Y 值 */
+    public double spawnY(Team team) {
+        return pos().spawnY(team);
+    }
+
+    // ------------------------------------------------------------------
+    // 排队 / 加入
+    // ------------------------------------------------------------------
+
+    public boolean addPlayer(Player p) {
+        if (state != GameState.WAITING || isFull()) return false;
+        Team team = nextTeam();
+        players.put(p.getUniqueId(), team);
+        alive.add(p.getUniqueId());
+        broadcast("game.joined", "name", p.getName(),
+                "count", String.valueOf(players.size()), "max", String.valueOf(maxPlayers()));
+        // 排队阶段留在原地（大厅），人齐后再传送；背包清空只保留退出排队染料
+        p.setGameMode(GameMode.SURVIVAL);
+        clearInventory(p);
+        plugin.lobbyMenu().giveQueueItem(p); // 第 9 格：退出排队
+        checkCountdown();
+        return true;
+    }
+
+    /** reasonKey 为 messages.yml 里的消息键（game.left / game.quit） */
+    public void leave(Player p, String reasonKey) {
+        Team team = players.remove(p.getUniqueId());
+        if (team == null) return;
+        alive.remove(p.getUniqueId());
+        broadcast(reasonKey, "name", p.getName());
+        if (state == GameState.STARTING) {
+            if (matchCountdown) {
+                stopCountdown();
+                removeBar();
+                state = GameState.WAITING;
+                countdownSeconds = 0;
+                broadcast("match.cancelled");
+                sendBackToLobby(); // 剩下的玩家遣返大厅，别困在空场
+            } else {
+                // 多局制局间退出：整队没人了才判负整场，还有队友则继续本局（少打多）
+                boolean teamEmpty = players.values().stream().noneMatch(t -> t == team);
+                transferHealthOnQuit(p, team);
+                if (teamEmpty) {
+                    stopCountdown();
+                    removeBar();
+                    state = GameState.RUNNING;
+                    end(team.opposite());
+                }
+            }
+        } else if (state == GameState.RUNNING) {
+            transferHealthOnQuit(p, team);
+            // 无论退出时是否存活（含死亡界面退出），人数变化都可能直接判负
+            checkEnd();
+        }
+    }
+
+    /**
+     * 多人模式队友退出：把退出者的剩余血量转移给存活的同队队友，
+     * 并把队友血量上限翻倍（20 → 40）以容纳。
+     */
+    private void transferHealthOnQuit(Player quitter, Team team) {
+        if (teamSize <= 1 || quitter.isDead()) return;
+        double quitHealth = Math.max(0, quitter.getHealth());
+        if (quitHealth < 0.5) return;
+        Player mate = null;
+        for (Map.Entry<UUID, Team> entry : players.entrySet()) {
+            if (entry.getValue() != team || entry.getKey().equals(quitter.getUniqueId())) continue;
+            Player candidate = Bukkit.getPlayer(entry.getKey());
+            if (candidate != null && candidate.isOnline() && !candidate.isDead()) {
+                mate = candidate;
+                break;
+            }
+        }
+        if (mate == null) return;
+        org.bukkit.attribute.AttributeInstance maxHealth =
+                mate.getAttribute(org.bukkit.attribute.Attribute.MAX_HEALTH);
+        if (maxHealth == null) return;
+        double cap = 20.0 * teamSize; // 上限封顶：不随连续退出无限翻倍
+        double newMax = Math.min(cap, maxHealth.getBaseValue() * 2);
+        maxHealth.setBaseValue(newMax);
+        mate.setHealth(Math.min(newMax, mate.getHealth() + quitHealth));
+        broadcast("game.health-inherited",
+                "mate", mate.getName(), "quitter", quitter.getName(),
+                "max", String.format("%.0f", newMax));
+    }
+
+    /** 排队/倒计时中断：把还在场上的玩家送回大厅并发等待区物品 */
+    private void sendBackToLobby() {
+        Location lobby = plugin.lobby();
+        for (UUID id : new ArrayList<>(players.keySet())) {
+            Player p = Bukkit.getPlayer(id);
+            if (p == null || !p.isOnline()) continue;
+            if (lobby != null && !LocUtil.sameBlock(p.getLocation(), lobby)) {
+                p.setFallDistance(0f);
+                p.teleport(lobby);
+            }
+            plugin.lobbyMenu().giveLobbyItems(p);
+            plugin.updateVisibility(p);
+        }
+    }
+
+    private Team nextTeam() {
+        int red = 0;
+        for (Team team : players.values()) {
+            if (team == Team.RED) red++;
+        }
+        return red <= players.size() - red ? Team.RED : Team.BLUE;
+    }
+
+    // ------------------------------------------------------------------
+    // 匹配 / 倒计时 / 开局
+    // ------------------------------------------------------------------
+
+    private void checkCountdown() {
+        if (state != GameState.WAITING) return;
+        if (!isFull()) return; // 满员（teamSize * 2）才开局
+        state = GameState.STARTING;
+        countdownSeconds = plugin.settings().countdownSeconds();
+        countdownBar = Bukkit.createBossBar(
+                Msg.text("match.count-bar").replace('&', '§'),
+                org.bukkit.boss.BarColor.YELLOW,
+                org.bukkit.boss.BarStyle.SEGMENTED_10);
+        countdownBar.setProgress(1.0);
+        updateBarViewers();
+        broadcast("match.matched");
+        // 匹配到才把所有人传送到各自出生点，等待期间禁止移动（监听器处理）
+        for (Map.Entry<UUID, Team> entry : players.entrySet()) {
+            Player pl = Bukkit.getPlayer(entry.getKey());
+            if (pl == null || !pl.isOnline()) continue;
+            pl.setGameMode(GameMode.SURVIVAL);
+            clearInventory(pl);
+            pl.setHealth(20.0);
+            pl.setFoodLevel(20);
+            pl.setFireTicks(0);
+            Location spawn = pos().spawn(entry.getValue());
+            if (spawn != null) pl.teleport(spawn);
+            pl.setFallDistance(0f);
+        }
+        broadcast("match.countdown", "seconds", String.valueOf(countdownSeconds));
+        // 匹配成功：图腾特效（粒子爆发 + 模式图标从头顶升起）
+        for (UUID id : players.keySet()) {
+            Player pl = Bukkit.getPlayer(id);
+            if (pl != null && pl.isOnline()) playMatchTotem(pl);
+        }
+        startCountdownTask();
+    }
+
+    /** 倒计时任务（首次匹配与局间共用） */
+    private void startCountdownTask() {
+        countdownTask = new BukkitRunnable() {
+            @Override
+            public void run() {
+                if (players.size() < maxPlayers()) {
+                    cancel();
+                    countdownTask = null;
+                    if (matchCountdown) {
+                        // 排队的人跑了：回到等待状态
+                        state = GameState.WAITING;
+                        countdownSeconds = 0;
+                        removeBar();
+                        broadcast("match.cancelled");
+                        sendBackToLobby();
+                    } else {
+                        // 局间有人跑了但队友还在：少打多，直接开局
+                        start();
+                    }
+                    return;
+                }
+                countdownSeconds--;
+                if (countdownSeconds <= 0) {
+                    cancel();
+                    countdownTask = null;
+                    removeBar();
+                    start();
+                    return;
+                }
+                updateBarViewers();
+                int total = matchCountdown
+                        ? Math.max(1, plugin.settings().countdownSeconds())
+                        : Math.max(1, plugin.settings().roundCountdownSeconds());
+                countdownBar.setProgress(Math.max(0.0, Math.min(1.0, countdownSeconds / (double) total)));
+                if (countdownSeconds <= 5 || countdownSeconds % 5 == 0) {
+                    for (Player p : onlinePlayers()) {
+                        if (matchCountdown) {
+                            Msg.title(p, "match.count-title", "match.count-sub",
+                                    "seconds", String.valueOf(countdownSeconds), "mode", mode.display());
+                        } else {
+                            Msg.title(p, "match.count-title", "match.round-title",
+                                    "seconds", String.valueOf(countdownSeconds),
+                                    "round", String.valueOf(roundsCurrent));
+                        }
+                        p.playSound(p.getLocation(), Sound.BLOCK_NOTE_BLOCK_PLING, 1f, 1f);
+                    }
+                }
+            }
+        }.runTaskTimer(plugin, 20L, 20L);
+    }
+
+    /**
+     * 匹配成功特效：不死图腾弹出动画的复刻——
+     * 图腾粒子爆发 + 模式图标以 GUI 平面样式（和菜单里一样的图标外观）
+     * 从玩家胸口位置升起、缓慢旋转、放大后消失，全程约 2.5 秒。
+     */
+    private void playMatchTotem(Player p) {
+        Material icon = mode.icon();
+        p.getWorld().spawnParticle(Particle.TOTEM_OF_UNDYING,
+                p.getLocation().clone().add(0, 1, 0), 60, 0.5, 0.8, 0.5, 0.2);
+        ItemStack stack = new ItemStack(icon);
+        final float scale = (float) plugin.settings().totemScale();
+        ItemDisplay display = p.getWorld().spawn(
+                p.getLocation().clone().add(0, 0.9, 0), ItemDisplay.class, d -> {
+                    d.setItemStack(stack);
+                    d.setItemDisplayTransform(ItemDisplay.ItemDisplayTransform.GUI); // 平面图标观感
+                    d.setBillboard(Display.Billboard.CENTER);
+                    d.setShadowRadius(0f);
+                    d.setPersistent(false);
+                    d.setBrightness(new Display.Brightness(15, 15)); // 全亮度，不受光照影响
+                    org.bukkit.util.Transformation t = d.getTransformation();
+                    d.setTransformation(new org.bukkit.util.Transformation(
+                            t.getTranslation(),
+                            t.getLeftRotation(),
+                            new org.joml.Vector3f(scale, scale, scale), // 放大（totem-scale）
+                            t.getRightRotation()));
+                });
+        final long durationTicks = Math.max(5L, (long) (plugin.settings().totemDurationSeconds() * 20));
+        final float totalRise = 1.6f;
+        new BukkitRunnable() {
+            int ticks = 0;
+
+            @Override
+            public void run() {
+                ticks += 2;
+                if (ticks >= durationTicks || !display.isValid()) {
+                    display.remove();
+                    cancel();
+                    return;
+                }
+                float progress = (float) ticks / durationTicks;
+                float rise = totalRise * progress;
+                var t = display.getTransformation();
+                t.getLeftRotation().rotationY(progress * (float) Math.PI); // 缓慢旋转一圈
+                display.setInterpolationDelay(0);
+                display.setInterpolationDuration(2);
+                display.setTransformation(new org.bukkit.util.Transformation(
+                        new org.joml.Vector3f(0, rise, 0),
+                        t.getLeftRotation(),
+                        new org.joml.Vector3f(scale, scale, scale),
+                        t.getRightRotation()));
+            }
+        }.runTaskTimer(plugin, 2L, 2L);
+    }
+
+    public void start() {
+        state = GameState.RUNNING;
+        removeBar();
+        if (hasBeds()) restoreBeds();
+        placeGuards();
+        for (Map.Entry<UUID, Team> entry : players.entrySet()) {
+            Player p = Bukkit.getPlayer(entry.getKey());
+            if (p == null) continue;
+            alive.add(entry.getKey());
+            if (p.isDead()) continue; // 局间切换时还在死亡界面的：重生事件里处理
+            prepareSpawn(p, entry.getValue());
+        }
+        for (Player p : onlinePlayers()) {
+            plugin.updateVisibility(p); // 场内玩家互相可见、与大厅互相不可见
+            Msg.title(p, "match.start-title", "match.start-sub");
+            p.playSound(p.getLocation(), Sound.ENTITY_PLAYER_LEVELUP, 1f, 1.2f);
+        }
+        tickTask = new BukkitRunnable() {
+            int runs = 0;
+
+            @Override
+            public void run() {
+                voidCheck(); // 每 5 tick 检测虚空，降低死亡延迟
+                runs++;
+                if (runs % 4 == 0) { // 每秒
+                    mode.onSecondTick(Game.this);
+                    plugin.boards().updateGame(Game.this);
+                }
+            }
+        }.runTaskTimer(plugin, 5L, 5L);
+    }
+
+    /** 传送到出生点并发放装备（开局与重生共用） */
+    public void prepareSpawn(Player p, Team team) {
+        p.setGameMode(GameMode.SURVIVAL);
+        clearInventory(p);
+        giveKit(p, team);
+        org.bukkit.attribute.AttributeInstance maxHealth =
+                p.getAttribute(org.bukkit.attribute.Attribute.MAX_HEALTH);
+        if (maxHealth != null) maxHealth.setBaseValue(20.0); // 重置继承的血量上限
+        p.setHealth(20.0);
+        p.setFoodLevel(20);
+        p.setSaturation(20f);
+        p.setFireTicks(0);
+        p.clearActivePotionEffects();
+        int protect = plugin.settings().spawnProtectionSeconds();
+        if (protect > 0) {
+            protectionUntil.put(p.getUniqueId(),
+                    System.currentTimeMillis() + protect * 1000L); // 重生/开局保护
+        }
+        Location spawn = pos().spawn(team);
+        if (spawn != null && !LocUtil.sameBlock(p.getLocation(), spawn)) {
+            p.teleport(spawn); // 已在出生点附近就不重复传送，避免闪"正在加载地形"
+        }
+        p.setFallDistance(0f);
+    }
+
+    // ------------------------------------------------------------------
+    // 死亡 / 结算
+    // ------------------------------------------------------------------
+
+    public void handleDeath(Player victim) {
+        if (state != GameState.RUNNING) return;
+        alive.remove(victim.getUniqueId());
+        Player killer = victim.getKiller();
+        if (killer == null) killer = recentAttacker(victim); // 虚空/环境死亡也归属击杀
+        lastAttacker.remove(victim.getUniqueId());
+        lastAttackTime.remove(victim.getUniqueId());
+        boolean credited = false;
+        if (killer != null && !killer.equals(victim) && isParticipant(killer.getUniqueId())
+                && players.get(killer.getUniqueId()) != players.get(victim.getUniqueId())) {
+            kills.merge(killer.getUniqueId(), 1, Integer::sum);
+            credited = true;
+        }
+        if (credited) {
+            broadcast("game.killed", "victim", nameOf(victim.getUniqueId()), "killer", killer.getName());
+        } else {
+            broadcast("game.died", "victim", nameOf(victim.getUniqueId()));
+        }
+        if (shouldRespawn(victim)) {
+            Msg.title(victim, "game.death-title", "game.death-sub");
+        } else {
+            Msg.title(victim, "game.elim-title", "game.elim-sub");
+        }
+        checkEnd();
+    }
+
+    protected void checkEnd() {
+        if (state != GameState.RUNNING) return;
+        // 床还在且队员未退场 → 死了也会重生，不算被淘汰
+        boolean redOut = aliveCount(Team.RED) == 0 && (!bedAlive(Team.RED) || teamCount(Team.RED) == 0);
+        boolean blueOut = aliveCount(Team.BLUE) == 0 && (!bedAlive(Team.BLUE) || teamCount(Team.BLUE) == 0);
+        if (redOut && blueOut) end(null);
+        else if (redOut) end(Team.BLUE);
+        else if (blueOut) end(Team.RED);
+    }
+
+    private int teamCount(Team team) {
+        int n = 0;
+        for (Team t : players.values()) {
+            if (t == team) n++;
+        }
+        return n;
+    }
+
+    /** 一局结束：回合制下先记账，未分出胜负则开下一局 */
+    public void end(Team winner) {
+        if (state != GameState.RUNNING) return;
+        stopTick();
+        if (winner != null) {
+            roundWins.merge(winner, 1, Integer::sum);
+        }
+        roundsPlayed++;
+        int wins = winner == null ? 0 : roundWins.getOrDefault(winner, 0);
+        int needed = roundsTotal / 2 + 1; // 过半即胜（3 局 = 先胜 2）
+        int red = roundWins.getOrDefault(Team.RED, 0);
+        int blue = roundWins.getOrDefault(Team.BLUE, 0);
+
+        // 一方无人在线 → 直接判整场
+        int redOnline = 0;
+        int blueOnline = 0;
+        for (Map.Entry<UUID, Team> entry : players.entrySet()) {
+            Player p = Bukkit.getPlayer(entry.getKey());
+            if (p != null && p.isOnline()) {
+                if (entry.getValue() == Team.RED) redOnline++;
+                else blueOnline++;
+            }
+        }
+
+        boolean seriesOver;
+        Team matchWinner = null;
+        if (roundsTotal <= 1) {
+            seriesOver = true;
+            matchWinner = winner;
+        } else if (redOnline == 0 && blueOnline == 0) {
+            seriesOver = true;
+            matchWinner = null;
+        } else if (redOnline == 0) {
+            seriesOver = true;
+            matchWinner = Team.BLUE;
+        } else if (blueOnline == 0) {
+            seriesOver = true;
+            matchWinner = Team.RED;
+        } else if (wins >= needed) {
+            seriesOver = true;
+            matchWinner = winner;
+        } else if (roundsPlayed >= roundsTotal) {
+            seriesOver = true;
+            matchWinner = red == blue ? null : (red > blue ? Team.RED : Team.BLUE);
+        } else {
+            seriesOver = false;
+        }
+
+        if (!seriesOver) {
+            if (winner == null) {
+                broadcast("game.draw");
+            } else {
+                broadcast("game.round-won",
+                        "team", legacyName(winner), "round", String.valueOf(roundsCurrent),
+                        "red", String.valueOf(red), "blue", String.valueOf(blue));
+            }
+            beginRound();
+            return;
+        }
+        finishMatch(matchWinner);
+    }
+
+    /** 多局制：重置本局状态并进入短倒计时 */
+    private void beginRound() {
+        roundsCurrent++;
+        state = GameState.STARTING;
+        matchCountdown = false;
+        countdownSeconds = plugin.settings().roundCountdownSeconds();
+        cancelGhosts();
+        for (Team team : Team.values()) {
+            bedAlive.put(team, true);
+        }
+        tracker.rollback();
+        if (hasBeds()) restoreBeds();
+        placeGuards();
+        for (UUID id : players.keySet()) {
+            alive.add(id); // 存活玩家的装备由 start() 统一发放；死亡界面的由重生事件处理
+        }
+        countdownBar = Bukkit.createBossBar(
+                Msg.text("match.round-bar", "round", String.valueOf(roundsCurrent)).replace('&', '§'),
+                org.bukkit.boss.BarColor.YELLOW, org.bukkit.boss.BarStyle.SEGMENTED_10);
+        countdownBar.setProgress(1.0);
+        updateBarViewers();
+        startCountdownTask();
+    }
+
+    /** 队伍名带颜色的旧式字符串（供消息占位符使用） */
+    private String legacyName(Team team) {
+        return team.legacyName();
+    }
+
+    /** 终局结算（原 end 主体） */
+    private void finishMatch(Team winner) {
+        state = GameState.ENDING;
+        stopCountdown();
+        stopTick();
+        removeBar();
+        broadcast(winner == null ? "game.draw" : "game.win",
+                "team", winner == null ? "" : legacyName(winner));
+        if (roundsTotal > 1) {
+            broadcast("game.score",
+                    "red", String.valueOf(roundWins.getOrDefault(Team.RED, 0)),
+                    "blue", String.valueOf(roundWins.getOrDefault(Team.BLUE, 0)));
+        }
+        String mvp = mvpDescription();
+        if (mvp != null) broadcast("game.mvp", "mvp", mvp);
+        for (Player p : onlinePlayers()) {
+            Msg.title(p,
+                    winner == null ? "game.end-title-draw" : "game.end-title",
+                    "game.end-sub",
+                    "team", winner == null ? "" : legacyName(winner));
+            p.playSound(p.getLocation(), Sound.ENTITY_PLAYER_LEVELUP, 1f, 1f);
+        }
+        new BukkitRunnable() {
+            @Override
+            public void run() {
+                cleanup();
+            }
+        }.runTaskLater(plugin, 100L);
+    }
+
+    private void cleanup() {
+        cancelGhosts();
+        dismissSpectators();
+        for (UUID id : new ArrayList<>(players.keySet())) {
+            players.remove(id);
+            Player p = Bukkit.getPlayer(id);
+            if (p != null && p.isOnline()) resetToLobby(p);
+        }
+        alive.clear();
+        kills.clear();
+        arena.releasePosition(position);
+        onEnd();
+        plugin.games().unregister(this);
+    }
+
+    /** 空场解散（等待中没人了） */
+    public void disband() {
+        if (state == GameState.ENDING) return;
+        state = GameState.ENDING;
+        stopCountdown();
+        stopTick();
+        removeBar();
+        cancelGhosts();
+        dismissSpectators();
+        players.clear();
+        alive.clear();
+        arena.releasePosition(position);
+        onEnd();
+        plugin.games().unregister(this);
+    }
+
+    /** 关服时立即结束并还原 */
+    public void shutdownNow() {
+        state = GameState.ENDING;
+        stopCountdown();
+        stopTick();
+        removeBar();
+        cancelGhosts();
+        dismissSpectators();
+        for (UUID id : new ArrayList<>(players.keySet())) {
+            players.remove(id);
+            Player p = Bukkit.getPlayer(id);
+            if (p != null && p.isOnline()) resetToLobby(p);
+        }
+        arena.releasePosition(position);
+        onEnd();
+        plugin.games().unregister(this);
+    }
+
+    public void resetToLobby(Player p) {
+        clearInventory(p);
+        p.setGameMode(GameMode.SURVIVAL);
+        org.bukkit.attribute.AttributeInstance maxHealth =
+                p.getAttribute(org.bukkit.attribute.Attribute.MAX_HEALTH);
+        if (maxHealth != null) maxHealth.setBaseValue(20.0); // 别把继承的上限带进大厅
+        p.setHealth(20.0);
+        p.setFoodLevel(20);
+        p.setSaturation(20f);
+        p.setFireTicks(0);
+        p.setFlying(false);
+        p.setAllowFlight(false);
+        p.setCollidable(true);
+        p.clearActivePotionEffects();
+        plugin.boards().showLobby(p);
+        plugin.lobbyMenu().giveLobbyItems(p); // 游戏菜单 + 快速加入上次
+        plugin.updateVisibility(p);           // 回到大厅：与大厅玩家互相隐藏
+        Location lobby = plugin.lobby();
+        if (lobby != null && !LocUtil.sameBlock(p.getLocation(), lobby)) {
+            p.teleport(lobby);
+        }
+        Msg.send(p, "lobby.returned");
+    }
+
+    // ------------------------------------------------------------------
+    // 虚空处死
+    // ------------------------------------------------------------------
+
+    /** 虚空处死检测（每 5 tick，低延迟；仅游戏进行中，且模式允许） */
+    private void voidCheck() {
+        int below = plugin.settings().voidBelowSpawn();
+        if (below <= 0 || state != GameState.RUNNING || !mode.settings().isVoidKill()) return;
+        for (UUID id : players.keySet()) {
+            if (!alive.contains(id) || ghosts.contains(id)) continue;
+            Player p = Bukkit.getPlayer(id);
+            if (p == null || !p.isOnline()) continue;
+            double spawnY = pos().spawnY(players.get(id));
+            if (Double.isNaN(spawnY)) continue;
+            if (p.getLocation().getY() < spawnY - below) {
+                p.setHealth(0.0); // 走正常死亡流程（有床则进入重生等待）
+            }
+        }
+    }
+
+    // ------------------------------------------------------------------
+    // 床（目标方块）
+    // ------------------------------------------------------------------
+
+    public boolean hasBeds() {
+        return mode.needsBeds();
+    }
+
+    /** 模式设置快捷访问 */
+    public ModeSettings modeSettings() {
+        return mode.settings();
+    }
+
+    public boolean bedAlive(Team team) {
+        if (!hasBeds()) return false;
+        return bedAlive.getOrDefault(team, false);
+    }
+
+    /** 床在则死亡重生，床没了死亡即淘汰 */
+    public boolean shouldRespawn(Player p) {
+        Team team = teamOf(p.getUniqueId());
+        return team != null && bedAlive(team);
+    }
+
+    protected void restoreBeds() {
+        for (Team team : Team.values()) {
+            Location head = pos().bedHead(team);
+            BlockFace facing = pos().bedFacing(team);
+            if (head == null || facing == null) continue;
+            placeBed(team, head.getBlock(), facing);
+        }
+    }
+
+    private void placeBed(Team team, Block headBlock, BlockFace facing) {
+        Material material = team == Team.RED ? Material.RED_BED : Material.BLUE_BED;
+        Block footBlock = headBlock.getRelative(facing.getOppositeFace());
+        Bed headData = (Bed) material.createBlockData();
+        headData.setPart(Bed.Part.HEAD);
+        headData.setFacing(facing);
+        headBlock.setBlockData(headData);
+        Bed footData = (Bed) material.createBlockData();
+        footData.setPart(Bed.Part.FOOT);
+        footData.setFacing(facing);
+        footBlock.setBlockData(footData);
+    }
+
+    /** 玩家左键拆床（监听器已把破坏事件取消，实际处理在这里做） */
+    public void handleBedBreak(Player breaker, Block block) {
+        if (!(block.getBlockData() instanceof Bed bed)) return;
+        Location headLoc = bed.getPart() == Bed.Part.HEAD
+                ? block.getLocation()
+                : block.getRelative(bed.getFacing()).getLocation();
+        Team brokenTeam = null;
+        for (Team team : Team.values()) {
+            Location stored = pos().bedHead(team);
+            if (stored != null && LocUtil.sameBlock(stored, headLoc)) {
+                brokenTeam = team;
+                break;
+            }
+        }
+        if (brokenTeam == null) return; // 不是本游戏的床
+        Team breakerTeam = teamOf(breaker.getUniqueId());
+        if (breakerTeam == brokenTeam) {
+            Msg.send(breaker, "bed.own");
+            return;
+        }
+        if (!bedAlive(brokenTeam)) return;
+        bedAlive.put(brokenTeam, false);
+        block.setType(Material.AIR);
+        Block other = bed.getPart() == Bed.Part.HEAD
+                ? block.getRelative(bed.getFacing().getOppositeFace())
+                : block.getRelative(bed.getFacing());
+        other.setType(Material.AIR);
+        broadcast("bed.destroyed", "player", breaker.getName(), "team", legacyName(brokenTeam));
+        for (Player pl : onlinePlayers()) {
+            Team team = teamOf(pl.getUniqueId());
+            if (team == null) continue;
+            if (team == brokenTeam) {
+                Msg.title(pl, "bed.destroyed-title", "bed.destroyed-sub");
+            } else {
+                Msg.title(pl, "bed.enemy-title", "bed.enemy-sub", "team", legacyName(brokenTeam));
+            }
+            pl.playSound(pl.getLocation(), Sound.ENTITY_ENDER_DRAGON_GROWL, 0.6f, 1f);
+        }
+    }
+
+    // ------------------------------------------------------------------
+    // 围床结构
+    // ------------------------------------------------------------------
+
+    public boolean isGuardBlock(Block block) {
+        return guardBlocks.contains(block.getLocation());
+    }
+
+    /** 把记录的围床结构放到两张床周围（每局开始/结束调用），本局内这些方块可拆可炸 */
+    private void placeGuards() {
+        guardBlocks.clear();
+        if (!mode.settings().isNeedsGuard() || arena.getGuardEntries().isEmpty()) return;
+        for (Team team : Team.values()) {
+            Location head = pos().bedHead(team);
+            if (head == null) continue;
+            for (Arena.GuardEntry entry : arena.getGuardEntries()) {
+                Block block = head.clone().add(entry.dx(), entry.dy(), entry.dz()).getBlock();
+                block.setBlockData(Bukkit.createBlockData(entry.data()));
+                guardBlocks.add(block.getLocation());
+            }
+        }
+    }
+
+    // ------------------------------------------------------------------
+    // 重生等待（幽灵状态）：隐身无粒子 + 无敌 + 可飞行 + 无碰撞 + 不可攻击/破坏
+    // ------------------------------------------------------------------
+
+    public boolean isGhost(UUID id) {
+        return ghosts.contains(id);
+    }
+
+    /** 死亡后进入重生等待（秒数 settings.respawn-seconds），期间为幽灵状态 */
+    public void beginGhostRespawn(Player p, Team team) {
+        ghosts.add(p.getUniqueId());
+        alive.remove(p.getUniqueId());
+        p.setGameMode(GameMode.SURVIVAL);
+        p.setFallDistance(0f);
+        p.setFireTicks(0);
+        // 无粒子隐身（图标也不显示），到时自动失效，prepareSpawn 也会清一次
+        p.addPotionEffect(new PotionEffect(
+                PotionEffectType.INVISIBILITY, PotionEffect.INFINITE_DURATION, 0, false, false, false));
+        p.setAllowFlight(true);
+        p.setFlying(true);
+        p.setCollidable(false); // 无碰撞箱：其他玩家碰不到
+        hideGhost(p);           // 对其他玩家隐藏实体：真正打不到
+        int wait = plugin.settings().respawnSeconds();
+        UUID id = p.getUniqueId();
+        ghostTasks.put(id, new BukkitRunnable() {
+            int left = wait;
+
+            @Override
+            public void run() {
+                Player player = Bukkit.getPlayer(id);
+                if (!players.containsKey(id) || state != GameState.RUNNING || player == null) {
+                    cancel();
+                    ghostTasks.remove(id);
+                    if (player != null) endGhost(player);
+                    return;
+                }
+                if (left <= 0) {
+                    cancel();
+                    ghostTasks.remove(id);
+                    endGhost(player);
+                    markAlive(id);
+                    prepareSpawn(player, team);
+                    Msg.title(player, "ghost.respawn-title", "ghost.respawn-sub", "team", legacyName(team));
+                    player.playSound(player.getLocation(), Sound.ENTITY_PLAYER_LEVELUP, 0.8f, 1.5f);
+                    return;
+                }
+                Msg.title(player, "ghost.wait-title", "ghost.wait-sub", "seconds", String.valueOf(left));
+                left--;
+            }
+        }.runTaskTimer(plugin, 10L, 20L));
+    }
+
+    private void endGhost(Player p) {
+        ghosts.remove(p.getUniqueId());
+        p.removePotionEffect(PotionEffectType.INVISIBILITY);
+        p.setFlying(false);
+        p.setAllowFlight(false);
+        p.setCollidable(true);
+        p.setFallDistance(0f);
+        unhideGhost(p);
+    }
+
+    /** 幽灵对所有其他玩家隐藏实体（隐身药水不隐藏命中框，隐藏实体才能真正做到打不到） */
+    private void hideGhost(Player ghost) {
+        for (Player other : Bukkit.getOnlinePlayers()) {
+            if (!other.equals(ghost)) other.hidePlayer(plugin, ghost);
+        }
+    }
+
+    private void unhideGhost(Player ghost) {
+        for (Player other : Bukkit.getOnlinePlayers()) {
+            other.showPlayer(plugin, ghost);
+        }
+    }
+
+    /** 结束/解散时清理所有幽灵状态与任务 */
+    protected void cancelGhosts() {
+        for (BukkitTask task : ghostTasks.values()) {
+            task.cancel();
+        }
+        ghostTasks.clear();
+        for (UUID id : new ArrayList<>(ghosts)) {
+            ghosts.remove(id);
+            Player p = Bukkit.getPlayer(id);
+            if (p != null && p.isOnline()) {
+                p.removePotionEffect(PotionEffectType.INVISIBILITY);
+                p.setFlying(false);
+                p.setAllowFlight(false);
+                p.setCollidable(true);
+                unhideGhost(p);
+            }
+        }
+    }
+
+    // ------------------------------------------------------------------
+    // 装备：个人 kit 快照 → 竞技场 kit → 模式默认 kit，最后补守家羊毛
+    // ------------------------------------------------------------------
+
+    private record PersonalKit(List<ItemStack> storage, ItemStack helmet, ItemStack chestplate,
+                               ItemStack leggings, ItemStack boots) {
+    }
+
+    /** 死亡事件当场调用（此时背包还没被原版清空）；全空则不保存 */
+    public void snapshotKit(Player p) {
+        PlayerInventory inv = p.getInventory();
+        List<ItemStack> storage = new ArrayList<>();
+        for (ItemStack stack : inv.getStorageContents()) {
+            storage.add(stack == null ? null : stack.clone());
+        }
+        PersonalKit kit = new PersonalKit(
+                storage,
+                cloneOrNull(inv.getHelmet()),
+                cloneOrNull(inv.getChestplate()),
+                cloneOrNull(inv.getLeggings()),
+                cloneOrNull(inv.getBoots()));
+        boolean empty = kit.helmet() == null && kit.chestplate() == null
+                && kit.leggings() == null && kit.boots() == null;
+        for (ItemStack stack : storage) {
+            if (stack != null && !stack.getType().isAir()) {
+                empty = false;
+                break;
+            }
+        }
+        if (!empty) {
+            personalKits.put(p.getUniqueId(), kit);
+        }
+    }
+
+    private ItemStack cloneOrNull(ItemStack stack) {
+        if (stack == null || stack.getType().isAir()) return null;
+        return stack.clone();
+    }
+
+    /** 发放装备：个人改过的 kit 优先，其次竞技场 kit，最后模式默认 */
+    protected final void giveKit(Player p, Team team) {
+        PlayerInventory inv = p.getInventory();
+        PersonalKit personal = personalKits.get(p.getUniqueId());
+        if (personal != null) {
+            // 本局内玩家调整过物品：按他自己的来，不影响竞技场 kit 和其他人
+            for (int i = 0; i < personal.storage().size(); i++) {
+                ItemStack stack = personal.storage().get(i);
+                if (stack != null && !stack.getType().isAir()) inv.setItem(i, stack.clone());
+            }
+            if (personal.helmet() != null) inv.setHelmet(personal.helmet().clone());
+            if (personal.chestplate() != null) inv.setChestplate(personal.chestplate().clone());
+            if (personal.leggings() != null) inv.setLeggings(personal.leggings().clone());
+            if (personal.boots() != null) inv.setBoots(personal.boots().clone());
+            return;
+        }
+        giveArenaKit(p, team, inv);
+        ItemStack guard = guardItem(team);
+        if (guard != null && guard.getAmount() > 0) {
+            inv.addItem(guard);
+        }
+    }
+
+    private void giveArenaKit(Player p, Team team, PlayerInventory inv) {
+        KitManager.Kit kit = plugin.kits().get(mode.id());
+        if (kit != null) {
+            // 模式级自定义 kit（/pa kit <模式> 设置，该模式所有竞技场共用）
+            List<ItemStack> items = kit.storage();
+            for (int i = 0; i < items.size(); i++) {
+                ItemStack stack = items.get(i);
+                if (stack != null && !stack.getType().isAir()) inv.setItem(i, teamColored(stack.clone(), team));
+            }
+            if (kit.helmet() != null) inv.setHelmet(teamColored(kit.helmet().clone(), team));
+            if (kit.chestplate() != null) inv.setChestplate(teamColored(kit.chestplate().clone(), team));
+            if (kit.leggings() != null) inv.setLeggings(teamColored(kit.leggings().clone(), team));
+            if (kit.boots() != null) inv.setBoots(teamColored(kit.boots().clone(), team));
+        } else {
+            mode.giveDefaultKit(this, p, team);
+            // 默认 kit 里的皮革也染成队伍颜色
+            for (ItemStack piece : inv.getArmorContents()) {
+                teamColored(piece, team);
+            }
+        }
+    }
+
+    /** 默认 kit 的守家羊毛（自定义 kit 的围床方块由 kit 本身提供，会自动染队色） */
+    protected ItemStack guardItem(Team team) {
+        int amount = plugin.settings().kitBlocks();
+        if (amount <= 0) return null;
+        return new ItemStack(team == Team.RED ? Material.RED_WOOL : Material.BLUE_WOOL, amount);
+    }
+
+    /** 皮革防具自动染成队伍颜色，羊毛自动换成队伍颜色羊毛，其他物品原样返回 */
+    private ItemStack teamColored(ItemStack stack, Team team) {
+        if (stack == null) return null;
+        if (stack.getType().name().endsWith("_WOOL")) {
+            return new ItemStack(team == Team.RED ? Material.RED_WOOL : Material.BLUE_WOOL, stack.getAmount());
+        }
+        if (stack.getItemMeta() instanceof LeatherArmorMeta meta) {
+            meta.setColor(team == Team.RED
+                    ? org.bukkit.Color.fromRGB(0xB0, 0x2E, 0x26)
+                    : org.bukkit.Color.fromRGB(0x3C, 0x44, 0xAA));
+            stack.setItemMeta(meta);
+        }
+        return stack;
+    }
+
+    // ------------------------------------------------------------------
+    // 结束钩子
+    // ------------------------------------------------------------------
+
+    protected void onEnd() {
+        if (hasBeds()) restoreBeds();
+        tracker.rollback();
+        placeGuards();
+    }
+
+    // ------------------------------------------------------------------
+    // 观战
+    // ------------------------------------------------------------------
+
+    public boolean isSpectator(UUID id) {
+        return spectators.contains(id);
+    }
+
+    /** 场外玩家进入观战（旁观模式，传送到观战点） */
+    public void addSpectator(Player p) {
+        spectators.add(p.getUniqueId());
+        p.setGameMode(GameMode.SPECTATOR);
+        Location point = arena.spectatorPoint(position);
+        if (point != null) p.teleport(point);
+        plugin.updateVisibility(p);
+        broadcast("spectate.started", "player", p.getName());
+        plugin.boards().showGame(p, this);
+        Msg.send(p, "spectate.hint", "arena", arena.getName());
+    }
+
+    /** 退出观战并回大厅 */
+    public void removeSpectator(Player p) {
+        if (!spectators.remove(p.getUniqueId())) return;
+        returnSpectatorToLobby(p);
+    }
+
+    /** 玩家掉线时静默移除 */
+    public void removeSpectatorQuiet(UUID id) {
+        spectators.remove(id);
+    }
+
+    private void returnSpectatorToLobby(Player p) {
+        p.setGameMode(GameMode.SURVIVAL);
+        p.setFlying(false);
+        p.setAllowFlight(false);
+        plugin.boards().showLobby(p);
+        plugin.lobbyMenu().giveLobbyItems(p);
+        plugin.updateVisibility(p);
+        Location lobby = plugin.lobby();
+        if (lobby != null && !LocUtil.sameBlock(p.getLocation(), lobby)) {
+            p.teleport(lobby);
+        }
+        Msg.send(p, "spectate.ended");
+    }
+
+    private void dismissSpectators() {
+        for (UUID id : new ArrayList<>(spectators)) {
+            Player p = Bukkit.getPlayer(id);
+            spectators.remove(id);
+            if (p != null && p.isOnline()) returnSpectatorToLobby(p);
+        }
+    }
+
+    // ------------------------------------------------------------------
+    // 查询 / 工具
+    // ------------------------------------------------------------------
+
+    public boolean isFull() {
+        return players.size() >= maxPlayers();
+    }
+
+    public int playersCount() {
+        return players.size();
+    }
+
+    public boolean isParticipant(UUID id) {
+        return players.containsKey(id);
+    }
+
+    public boolean isAlive(UUID id) {
+        return alive.contains(id);
+    }
+
+    public void markAlive(UUID id) {
+        alive.add(id);
+    }
+
+    public Team teamOf(UUID id) {
+        return players.get(id);
+    }
+
+    public int aliveCount(Team team) {
+        int n = 0;
+        for (Map.Entry<UUID, Team> entry : players.entrySet()) {
+            if (entry.getValue() == team && alive.contains(entry.getKey())) n++;
+        }
+        return n;
+    }
+
+    public BlockTracker tracker() {
+        return tracker;
+    }
+
+    public List<Player> onlinePlayers() {
+        List<Player> list = new ArrayList<>(players.size());
+        for (UUID id : players.keySet()) {
+            Player p = Bukkit.getPlayer(id);
+            if (p != null && p.isOnline()) list.add(p);
+        }
+        return list;
+    }
+
+    /** 广播一条消息键（含占位符），参与者和观战者都会收到 */
+    public void broadcast(String key, String... replacements) {
+        for (Player p : onlinePlayers()) {
+            Msg.send(p, key, replacements);
+        }
+        // 观战者也同步收听比赛消息
+        for (UUID id : spectators) {
+            Player p = Bukkit.getPlayer(id);
+            if (p != null && p.isOnline()) Msg.send(p, key, replacements);
+        }
+    }
+
+    public String describe() {
+        StringBuilder sb = new StringBuilder(arena.getName())
+                .append(" [").append(mode.display()).append("] ").append(state);
+        sb.append(" 玩家:");
+        for (UUID id : players.keySet()) sb.append(" ").append(nameOf(id));
+        if (!spectators.isEmpty()) {
+            sb.append(" 观战:");
+            for (UUID id : spectators) sb.append(" ").append(nameOf(id));
+        }
+        return sb.toString();
+    }
+
+    public List<String> scoreboardLinesFor(Player p) {
+        List<String> lines = new ArrayList<>();
+        lines.add("模式: " + mode.display());
+        lines.add("竞技场: " + arena.getName());
+        switch (state) {
+            case WAITING -> lines.add("等待玩家 " + players.size() + "/" + maxPlayers());
+            case STARTING -> lines.add("倒计时 " + countdownSeconds + "s");
+            case RUNNING -> lines.add("进行中");
+            case ENDING -> lines.add("已结束");
+        }
+        if (state == GameState.RUNNING || state == GameState.STARTING) {
+            lines.add("存活 红" + aliveCount(Team.RED) + " 蓝" + aliveCount(Team.BLUE));
+        }
+        if (roundsTotal > 1) {
+            lines.add("局数 红" + roundWins.getOrDefault(Team.RED, 0)
+                    + " 蓝" + roundWins.getOrDefault(Team.BLUE, 0)
+                    + "（第" + roundsCurrent + "局）");
+        }
+        if (state == GameState.RUNNING && hasBeds()) {
+            lines.add("床 红" + (bedAlive(Team.RED) ? "✔" : "✘") + " 蓝" + (bedAlive(Team.BLUE) ? "✔" : "✘"));
+        }
+        List<String> extra = new ArrayList<>();
+        mode.addScoreboardLines(this, extra);
+        lines.addAll(extra);
+        lines.add("击杀: " + kills.getOrDefault(p.getUniqueId(), 0));
+        return lines;
+    }
+
+    protected String nameOf(UUID id) {
+        Player p = Bukkit.getPlayer(id);
+        if (p != null) return p.getName();
+        String name = Bukkit.getOfflinePlayer(id).getName();
+        return name == null ? id.toString().substring(0, 8) : name;
+    }
+
+    private String mvpDescription() {
+        UUID best = null;
+        int bestKills = 0;
+        for (Map.Entry<UUID, Integer> entry : kills.entrySet()) {
+            if (entry.getValue() > bestKills) {
+                bestKills = entry.getValue();
+                best = entry.getKey();
+            }
+        }
+        return best == null ? null : nameOf(best) + " (" + bestKills + "杀)";
+    }
+
+    protected void clearInventory(Player p) {
+        PlayerInventory inv = p.getInventory();
+        inv.clear();
+        inv.setHelmet(null);
+        inv.setChestplate(null);
+        inv.setLeggings(null);
+        inv.setBoots(null);
+    }
+
+    /** 重生/开局保护期内 */
+    public boolean isProtected(UUID id) {
+        Long until = protectionUntil.get(id);
+        return until != null && until > System.currentTimeMillis();
+    }
+
+    /** 进攻会打破自己的保护 */
+    public void breakProtection(UUID id) {
+        protectionUntil.remove(id);
+    }
+
+    private void updateBarViewers() {
+        if (countdownBar == null) return;
+        for (Player p : Bukkit.getOnlinePlayers()) {
+            if (players.containsKey(p.getUniqueId())) {
+                countdownBar.addPlayer(p);
+            } else {
+                countdownBar.removePlayer(p);
+            }
+        }
+    }
+
+    private void removeBar() {
+        if (countdownBar != null) {
+            countdownBar.removeAll();
+            countdownBar = null;
+        }
+    }
+
+    protected void stopCountdown() {
+        if (countdownTask != null) {
+            countdownTask.cancel();
+            countdownTask = null;
+        }
+    }
+
+    protected void stopTick() {
+        if (tickTask != null) {
+            tickTask.cancel();
+            tickTask = null;
+        }
+    }
+}
