@@ -188,20 +188,11 @@ public class Arena {
     }
 
     // ------------------------------------------------------------------
-    // 自定义 kit（/pa setkit <场名> 把当前背包存为 kit）
+    // 遗留 kit 字段：仅用于加载旧版 arenas.yml 时一次性迁移到模式级 kit
     // ------------------------------------------------------------------
 
     public boolean hasCustomKit() {
         return kitItems != null;
-    }
-
-    public void setKit(List<ItemStack> storage, ItemStack helmet, ItemStack chestplate,
-                       ItemStack leggings, ItemStack boots) {
-        this.kitItems = new ArrayList<>(storage);
-        this.kitHelmet = helmet;
-        this.kitChestplate = chestplate;
-        this.kitLeggings = leggings;
-        this.kitBoots = boots;
     }
 
     public void clearKit() {

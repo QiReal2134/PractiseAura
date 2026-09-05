@@ -41,7 +41,7 @@ import org.bukkit.scheduler.BukkitTask;
  * 一场进行中的游戏（当前固定 1v1，红蓝两队）。
  * 模式行为全部委托给 {@link ModeHandler}；地图数据来自 Arena 的某一组点位。
  * 职责：排队与倒计时、开局发装、床（目标方块）、围床结构、虚空处死、
- * 重生等待（幽灵状态）、个人 kit 快照、结算与回滚。
+ * 重生等待（幽灵状态）、结算与回滚。
  */
 public class Game {
 
@@ -60,7 +60,6 @@ public class Game {
     private final Set<UUID> ghosts = new HashSet<>();
     private final Map<UUID, BukkitTask> ghostTasks = new HashMap<>();
     private final Set<UUID> spectators = new HashSet<>();
-    /** 本局内玩家死亡时快照的背包（自动保存个人 kit 调整，不影响他人） */
 
     private final Map<UUID, Long> protectionUntil = new HashMap<>();
     /** 最近攻击者记录：虚空/环境死亡时把击杀归属给 8 秒内打过你的人 */
@@ -189,6 +188,7 @@ public class Game {
     public void leave(Player p, String reasonKey) {
         Team team = players.remove(p.getUniqueId());
         if (team == null) return;
+        recordPersonalKit(p); // 掉线/退局也保存调整过的背包（没领过装备时自动跳过）
         alive.remove(p.getUniqueId());
         cancelGhost(p.getUniqueId()); // 幽灵退出：立即还原状态，别等重生任务下一拍（掉线时药水会被写进玩家数据）
         broadcast(reasonKey, "name", p.getName());
@@ -695,6 +695,7 @@ public class Game {
     }
 
     public void resetToLobby(Player p) {
+        recordPersonalKit(p); // 对局结束/关服回大厅前保存调整过的背包（阵亡者无 kit 快照，自动跳过）
         clearInventory(p);
         p.setGameMode(GameMode.SURVIVAL);
         org.bukkit.attribute.AttributeInstance maxHealth =
@@ -946,25 +947,30 @@ public class Game {
     }
 
     // ------------------------------------------------------------------
-    // 装备：模式 kit（/pa kit 设置）或模式默认，每次重生都是满配
+    // 装备：个人 kit > 模式 kit（/pa kit 设置）> 模式默认，每次重生都是满配
     // ------------------------------------------------------------------
 
-    /** 兼容保留：个人快照机制已移除，重生统一重新发放完整 kit */
-    public void snapshotKit(Player p) {
-    }
+    /** 本局实际发给各玩家的 kit 快照：死亡/离场时对比背包，玩家自己调整过才记为个人 kit */
+    private final Map<UUID, KitManager.Kit> givenKit = new HashMap<>();
 
-    /** 发放装备：模式 kit（/pa kit 设置）或模式默认，每次重生都是满配 */
+    /** 发放装备：个人 kit > 模式 kit（/pa kit 设置）或模式默认，每次重生都是满配 */
     protected final void giveKit(Player p, Team team) {
         PlayerInventory inv = p.getInventory();
-        giveArenaKit(p, team, inv);
-        ItemStack guard = guardItem(team);
-        if (guard != null && guard.getAmount() > 0) {
-            inv.addItem(guard);
+        boolean personal = giveArenaKit(p, team, inv);
+        // 守家羊毛只在默认 kit 时附加；自定义/个人 kit 自带羊毛的话不重复发（避免多给）
+        if (!personal && !arena.hasCustomKit()) {
+            ItemStack guard = guardItem(team);
+            if (guard != null && guard.getAmount() > 0) {
+                inv.addItem(guard);
+            }
         }
+        givenKit.put(p.getUniqueId(), snapshotInventory(p));
     }
 
-    private void giveArenaKit(Player p, Team team, PlayerInventory inv) {
-        KitManager.Kit kit = plugin.kits().get(mode.id());
+    /** @return 是否发放的是该玩家的个人 kit */
+    private boolean giveArenaKit(Player p, Team team, PlayerInventory inv) {
+        KitManager.Kit personal = plugin.playerKits().get(p.getUniqueId(), mode.id());
+        KitManager.Kit kit = personal != null ? personal : plugin.kits().get(mode.id());
         if (kit != null) {
             // 模式级自定义 kit（/pa kit <模式> 设置，该模式所有竞技场共用）
             List<ItemStack> items = kit.storage();
@@ -976,13 +982,56 @@ public class Game {
             if (kit.chestplate() != null) inv.setChestplate(teamColored(kit.chestplate().clone(), team));
             if (kit.leggings() != null) inv.setLeggings(teamColored(kit.leggings().clone(), team));
             if (kit.boots() != null) inv.setBoots(teamColored(kit.boots().clone(), team));
-        } else {
-            mode.giveDefaultKit(this, p, team);
-            // 默认 kit 里的皮革也染成队伍颜色
-            for (ItemStack piece : inv.getArmorContents()) {
-                teamColored(piece, team);
-            }
+            return personal != null;
         }
+        mode.giveDefaultKit(this, p, team);
+        // 默认 kit 里的皮革也染成队伍颜色
+        for (ItemStack piece : inv.getArmorContents()) {
+            teamColored(piece, team);
+        }
+        return false;
+    }
+
+    /** 死亡/离场前调用：背包和发下来的 kit 不一样（玩家自己调整过）→ 记为该玩家在该模式的个人 kit */
+    public void recordPersonalKit(Player p) {
+        KitManager.Kit given = givenKit.remove(p.getUniqueId());
+        if (given == null) return; // 没领过装备（排队中/幽灵等待/已阵亡）
+        KitManager.Kit current = snapshotInventory(p);
+        if (kitEquals(current, given)) return; // 没动过：不记，继续跟随模式 kit（管理员改 kit 能同步）
+        plugin.playerKits().record(p.getUniqueId(), mode.id(), current);
+        Msg.send(p, "kit.personal-saved", "mode", mode.display());
+    }
+
+    /** 当前背包（36 格 + 四件盔甲）的完整快照 */
+    private KitManager.Kit snapshotInventory(Player p) {
+        PlayerInventory inv = p.getInventory();
+        List<ItemStack> storage = new ArrayList<>(36);
+        for (ItemStack stack : inv.getStorageContents()) {
+            storage.add(stack == null ? null : stack.clone());
+        }
+        return new KitManager.Kit(storage,
+                cloneOrNull(inv.getHelmet()), cloneOrNull(inv.getChestplate()),
+                cloneOrNull(inv.getLeggings()), cloneOrNull(inv.getBoots()));
+    }
+
+    private static ItemStack cloneOrNull(ItemStack stack) {
+        return stack == null ? null : stack.clone();
+    }
+
+    /** 逐槽位比较（类型+数量+元数据）；同局同队，队色差异不参与 */
+    private static boolean kitEquals(KitManager.Kit a, KitManager.Kit b) {
+        List<ItemStack> as = a.storage();
+        List<ItemStack> bs = b.storage();
+        int n = Math.max(as.size(), bs.size());
+        for (int i = 0; i < n; i++) {
+            ItemStack x = i < as.size() ? as.get(i) : null;
+            ItemStack y = i < bs.size() ? bs.get(i) : null;
+            if (!java.util.Objects.equals(x, y)) return false;
+        }
+        return java.util.Objects.equals(a.helmet(), b.helmet())
+                && java.util.Objects.equals(a.chestplate(), b.chestplate())
+                && java.util.Objects.equals(a.leggings(), b.leggings())
+                && java.util.Objects.equals(a.boots(), b.boots());
     }
 
     /** 默认 kit 的守家羊毛（自定义 kit 的围床方块由 kit 本身提供，会自动染队色） */

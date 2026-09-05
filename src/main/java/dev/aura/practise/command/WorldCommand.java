@@ -207,9 +207,23 @@ public class WorldCommand implements CommandExecutor, TabCompleter {
             Msg.send(sender, "world.delete-usage");
             return;
         }
-        World world = Bukkit.getWorld(args[1]);
-        if (world == null) {
+        if (Bukkit.getWorld(args[1]) == null) {
             Msg.send(sender, "world.missing", "name", args[1]);
+            return;
+        }
+        deleteWorldFiles(plugin, sender, args[1]);
+    }
+
+    /** 卸载并真实删除世界文件夹，同时移除 worlds.yml 登记（供 /world delete 与 /pa delete 共用） */
+    public static void deleteWorldFiles(PractiseAuraPlugin plugin, CommandSender sender, String worldName) {
+        World world = Bukkit.getWorld(worldName);
+        if (world == null) {
+            // 世界未加载但文件夹可能还在：直接删文件夹
+            Path folder = new java.io.File(plugin.getDataFolder().getParentFile().getParentFile(), worldName)
+                    .toPath();
+            deleteFolder(folder);
+            unregister(plugin, worldName);
+            Msg.send(sender, "world.deleted", "name", worldName);
             return;
         }
         if (Bukkit.getWorlds().indexOf(world) == 0) {
@@ -230,7 +244,14 @@ public class WorldCommand implements CommandExecutor, TabCompleter {
             Msg.send(sender, "world.delete-fail");
             return;
         }
+        deleteFolder(folder);
+        unregister(plugin, worldName); // 同步移除 worlds.yml 登记，避免重启后重新加载已删除的世界
+        Msg.send(sender, "world.deleted", "name", worldName);
+    }
+
+    private static void deleteFolder(Path folder) {
         try {
+            if (!java.nio.file.Files.exists(folder)) return;
             Files.walk(folder)
                     .sorted(Comparator.reverseOrder())
                     .forEach(path -> {
@@ -239,11 +260,17 @@ public class WorldCommand implements CommandExecutor, TabCompleter {
                         } catch (IOException ignored) {
                         }
                     });
-            unregister(plugin, args[1]); // 同步移除 worlds.yml 登记，避免重启后重新加载已删除的世界
-            Msg.send(sender, "world.deleted", "name", args[1]);
-        } catch (IOException ex) {
-            Msg.send(sender, "world.delete-folder-fail", "error", ex.getMessage());
+        } catch (IOException ignored) {
         }
+    }
+
+    /** 世界是否登记在 worlds.yml 中（即由 /world create 创建的自定义世界） */
+    public static boolean isRegistered(PractiseAuraPlugin plugin, String name) {
+        java.io.File f = new java.io.File(plugin.getDataFolder(), "worlds.yml");
+        if (!f.exists()) return false;
+        org.bukkit.configuration.file.YamlConfiguration cfg =
+                org.bukkit.configuration.file.YamlConfiguration.loadConfiguration(f);
+        return cfg.contains("worlds." + name);
     }
 
     /** 世界删除后从 worlds.yml 移除登记 */

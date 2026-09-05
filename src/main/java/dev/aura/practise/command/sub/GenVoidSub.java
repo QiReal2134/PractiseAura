@@ -71,6 +71,7 @@ public class GenVoidSub implements SubCommand {
         ArenaPosition pos = arena.position(1);
         buildIsland(world, -DISTANCE, mode, Team.RED, pos);
         buildIsland(world, DISTANCE, mode, Team.BLUE, pos);
+        world.save(); // 立即落盘：虚空区块不自动保存，否则重启后地图重置
         plugin.arenas().saveAll();
         Msg.send(sender, "genvoid.success",
                 "name", arena.getName(), "world", world.getName(),

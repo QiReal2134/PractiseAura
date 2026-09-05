@@ -49,6 +49,7 @@ public final class PractiseAuraPlugin extends JavaPlugin {
     private ArenaManager arenaManager;
     private GameManager gameManager;
     private dev.aura.practise.manager.KitManager kitManager;
+    private dev.aura.practise.manager.PlayerKitManager playerKitManager;
     private ScoreboardService boards;
     private LobbyMenu lobbyMenu;
     private Location lobby;
@@ -69,6 +70,8 @@ public final class PractiseAuraPlugin extends JavaPlugin {
         WorldCommand.loadRegistered(this); // 加载 worlds.yml 登记的自定义世界（先于竞技场）
         kitManager = new dev.aura.practise.manager.KitManager(this);
         kitManager.load(); // 先加载 kit（竞技场加载时可能做旧版 kit 迁移）
+        playerKitManager = new dev.aura.practise.manager.PlayerKitManager(this);
+        playerKitManager.load(); // 玩家个人 kit（对局中自动记录）
         arenaManager = new ArenaManager(this);
         arenaManager.load();
         lobbyMenu = new LobbyMenu(this);
@@ -173,6 +176,10 @@ public final class PractiseAuraPlugin extends JavaPlugin {
 
     public dev.aura.practise.manager.KitManager kits() {
         return kitManager;
+    }
+
+    public dev.aura.practise.manager.PlayerKitManager playerKits() {
+        return playerKitManager;
     }
 
     public Location lobby() {

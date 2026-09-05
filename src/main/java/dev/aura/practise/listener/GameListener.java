@@ -128,13 +128,20 @@ public class GameListener implements Listener {
             return;
         }
         e.deathMessage(Msg.component("game.death-message", "player", victim.getName()));
-        game.snapshotKit(victim); // 当场快照（下一 tick 背包就被原版清空了）
+        game.recordPersonalKit(victim); // 死亡瞬间背包还在（下一 tick 被原版清空），调整过就记为个人 kit
         new BukkitRunnable() {
             @Override
             public void run() {
                 if (victim.isOnline()) game.handleDeath(victim);
             }
         }.runTask(plugin);
+        // 跳过死亡界面：自动触发重生，走正常 PlayerRespawnEvent 流程（观战/幽灵），丝滑无加载
+        new BukkitRunnable() {
+            @Override
+            public void run() {
+                if (victim.isOnline() && victim.isDead()) victim.spigot().respawn();
+            }
+        }.runTaskLater(plugin, 2L);
     }
 
     @EventHandler
