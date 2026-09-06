@@ -13,7 +13,6 @@ public class Settings {
 
     private final PractiseAuraPlugin plugin;
 
-    private int minPlayers;
     private int teamSize;
     private int rounds;
     private int roundCountdownSeconds;
@@ -45,7 +44,6 @@ public class Settings {
 
     /** 从 config.yml 重新读入所有值（/pa setting 修改后调用） */
     public void refresh() {
-        minPlayers = Math.max(2, plugin.getConfig().getInt("settings.min-players", 2));
         teamSize = clamp(plugin.getConfig().getInt("settings.team-size", 1), 1, 4);
         rounds = clamp(plugin.getConfig().getInt("settings.rounds", 1), 1, 5);
         roundCountdownSeconds = clamp(plugin.getConfig().getInt("settings.round-countdown-seconds", 3), 1, 15);
@@ -69,10 +67,6 @@ public class Settings {
         showAdminCommands = plugin.getConfig().getBoolean("settings.show-admin-commands", false);
         lobbyItem = material("settings.lobby-item", "IRON_SWORD");
         rejoinItem = material("settings.rejoin-item", "PAPER");
-    }
-
-    public int minPlayers() {
-        return minPlayers;
     }
 
     /** 每队人数（1=1v1，2=2v2，最多 4v4） */

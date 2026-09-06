@@ -29,7 +29,7 @@ settings:
   void-below-spawn: 12
   # 是否在 help / Tab 补全中显示管理命令（false=隐藏，输入完整命令仍可执行）
   show-admin-commands: false
-  # 火球参数（爆炸由插件接管：自己只吃击退不掉血，队友免疫）
+  # 火球参数（爆炸由插件接管：自己只吃击退不掉血，队友免伤害但仍受击退）
   fireball-power-x: 1.6   # 水平击退威力
   fireball-power-y: 0.8   # 垂直击退威力
   fireball-damage: 4.0    # 对敌人的伤害

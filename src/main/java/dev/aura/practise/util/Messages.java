@@ -183,6 +183,7 @@ public class Messages {
         d.put("kit.shared", "&7该模式所有竞技场共用此 kit；羊毛/皮革发放时会自动变成队伍颜色");
         d.put("kit.cleared", "&7已清除 {0} 的 kit，恢复默认");
         d.put("kit.personal-saved", "&a已记录你对 {0} kit 的调整，下次对局自动使用");
+        d.put("kit.personal-cleared", "&7你的调整已恢复原样，重新跟随模式 kit");
         d.put("kit.forget-usage", "&7用法: /pa kit <模式> forget <玩家>");
         d.put("kit.forgot", "&7已清除 {0} 在 {1} 的个人 kit");
         d.put("kit.forgot-none", "&7{0} 在 {1} 没有个人 kit");
@@ -213,7 +214,7 @@ public class Messages {
         d.put("world.create-usage", "&7用法: /world create <名> [void|flat|normal]");
         d.put("world.help-list", "&7/world list 查看所有世界");
         d.put("world.help-create", "&7/world create <名> [void|flat|normal] 创建世界（管理员）");
-        d.put("world.help-tp", "&7/world tp <名> 传送到世界");
+        d.put("world.help-tp", "&7/world tp <名> 传送到世界（管理员）");
         d.put("world.help-delete", "&7/world delete <名> 删除世界（管理员）");
         d.put("world.list-header", "&b=== 世界 ===");
         d.put("world.list-entry", "&7- {0} &8({1}, 玩家 {2})");
@@ -238,6 +239,22 @@ public class Messages {
         d.put("list.games-header", "&b=== 游戏 ===");
         d.put("list.games-empty", "&7（空）");
         d.put("list.game-entry", "&7{0}");
+        // 记分板（每行支持 & 颜色码）
+        d.put("scoreboard.title", "&bPractiseAura");
+        d.put("scoreboard.lobby-online", "在线: {0}");
+        d.put("scoreboard.lobby-join", "> /pa join {0}");
+        d.put("scoreboard.mode", "模式: {0}");
+        d.put("scoreboard.arena", "竞技场: {0}");
+        d.put("scoreboard.waiting", "等待玩家 {0}/{1}");
+        d.put("scoreboard.countdown", "倒计时 {0}s");
+        d.put("scoreboard.running", "进行中");
+        d.put("scoreboard.ended", "已结束");
+        d.put("scoreboard.alive", "存活 红{0} 蓝{1}");
+        d.put("scoreboard.rounds", "局数 红{0} 蓝{1}（第{2}局）");
+        d.put("scoreboard.beds", "床 红{0} 蓝{1}");
+        d.put("scoreboard.bed-yes", "✔");
+        d.put("scoreboard.bed-no", "✘");
+        d.put("scoreboard.kills", "击杀: {0}");
         d.put("menu.title", "&8选择模式");
         d.put("menu.item-title", "&b游戏菜单");
         d.put("menu.item-lore-1", "&7右键打开模式选择");

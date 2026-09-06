@@ -29,6 +29,7 @@ import org.bukkit.block.data.type.Bed;
 import org.bukkit.entity.Display;
 import org.bukkit.entity.ItemDisplay;
 import org.bukkit.entity.Player;
+import org.bukkit.inventory.EquipmentSlot;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.PlayerInventory;
 import org.bukkit.inventory.meta.LeatherArmorMeta;
@@ -415,6 +416,7 @@ public class Game {
         removeBar();
         if (hasBeds()) restoreBeds();
         placeGuards();
+        updateWorldAutoSave(false); // 对局期间关闭所在世界的自动保存，防中途关服写脏地图
         for (Map.Entry<UUID, Team> entry : players.entrySet()) {
             Player p = Bukkit.getPlayer(entry.getKey());
             if (p == null) continue;
@@ -440,6 +442,34 @@ public class Game {
                 }
             }
         }.runTaskTimer(plugin, 5L, 5L);
+    }
+
+    /** 重算本局参与者与全服的互见关系（匹配传送至出生点后调用，不等 start()） */
+    public void refreshVisibility() {
+        for (Player p : onlinePlayers()) {
+            plugin.updateVisibility(p);
+        }
+    }
+
+    /**
+     * 对局所在世界的自动保存开关：
+     * 开局关闭（防中途关服/崩溃把玩家放置/破坏的方块写进地图文件，重启后地图重置），
+     * 最后一局结束回滚后再恢复自动保存并把干净地图落盘。
+     */
+    private void updateWorldAutoSave(boolean enable) {
+        Location any = pos().spawn(Team.RED);
+        org.bukkit.World world = any == null ? null : any.getWorld();
+        if (world == null || arena.worldName() == null) return;
+        if (enable) {
+            boolean stillActive = plugin.games().active().stream()
+                    .anyMatch(g -> g != this && arena.worldName().equals(g.arena().worldName()));
+            if (!stillActive) {
+                world.setAutoSave(true);
+                world.save(); // 落盘回滚后的干净地图
+            }
+        } else {
+            world.setAutoSave(false);
+        }
     }
 
     /** 传送到出生点并发放装备（开局与重生共用） */
@@ -666,6 +696,8 @@ public class Game {
         kills.clear();
         arena.releasePosition(position);
         onEnd();
+        plugin.games().unregister(this);
+        updateWorldAutoSave(true); // 回滚完成后再恢复自动保存并把干净地图落盘
     }
 
     /** 空场解散（等待中没人了） */
@@ -682,6 +714,7 @@ public class Game {
         arena.releasePosition(position);
         onEnd();
         plugin.games().unregister(this);
+        updateWorldAutoSave(true);
     }
 
     /** 关服时立即结束并还原 */
@@ -700,6 +733,7 @@ public class Game {
         }
         arena.releasePosition(position);
         onEnd();
+        updateWorldAutoSave(true); // 关服前回滚并落盘干净地图
     }
 
     public void resetToLobby(Player p) {
@@ -980,7 +1014,8 @@ public class Game {
     /** @return 是否发放了自定义 kit（个人 kit 或模式 kit）；false = 模式默认 kit */
     private boolean giveArenaKit(Player p, Team team, PlayerInventory inv) {
         KitManager.Kit personal = plugin.playerKits().get(p.getUniqueId(), mode.id());
-        KitManager.Kit kit = personal != null ? personal : plugin.kits().get(mode.id());
+        KitManager.Kit kit = plugin.kits().get(mode.id());
+        boolean custom = kit != null;
         if (kit != null) {
             // 模式级自定义 kit（/pa kit <模式> 设置，该模式所有竞技场共用）
             List<ItemStack> items = kit.storage();
@@ -992,24 +1027,136 @@ public class Game {
             if (kit.chestplate() != null) inv.setChestplate(teamColored(kit.chestplate().clone(), team));
             if (kit.leggings() != null) inv.setLeggings(teamColored(kit.leggings().clone(), team));
             if (kit.boots() != null) inv.setBoots(teamColored(kit.boots().clone(), team));
-            return true;
+        } else {
+            mode.giveDefaultKit(this, p, team);
+            // 默认 kit 里的皮革也染成队伍颜色
+            for (ItemStack piece : inv.getArmorContents()) {
+                teamColored(piece, team);
+            }
         }
-        mode.giveDefaultKit(this, p, team);
-        // 默认 kit 里的皮革也染成队伍颜色
-        for (ItemStack piece : inv.getArmorContents()) {
-            teamColored(piece, team);
+        // 个人变化量叠加：AIR = 清空该槽位；item = 用玩家调整后的版本；没动的槽位跟随上面的原 kit
+        if (personal != null) {
+            List<ItemStack> items = personal.storage();
+            for (int i = 0; i < items.size(); i++) {
+                ItemStack stack = items.get(i);
+                if (stack == null) continue;
+                if (stack.getType().isAir()) inv.setItem(i, null);
+                else inv.setItem(i, teamColored(stack.clone(), team));
+            }
+            if (personal.helmet() != null) {
+                if (personal.helmet().getType().isAir()) inv.setHelmet(null);
+                else inv.setHelmet(teamColored(personal.helmet().clone(), team));
+            }
+            if (personal.chestplate() != null) {
+                if (personal.chestplate().getType().isAir()) inv.setChestplate(null);
+                else inv.setChestplate(teamColored(personal.chestplate().clone(), team));
+            }
+            if (personal.leggings() != null) {
+                if (personal.leggings().getType().isAir()) inv.setLeggings(null);
+                else inv.setLeggings(teamColored(personal.leggings().clone(), team));
+            }
+            if (personal.boots() != null) {
+                if (personal.boots().getType().isAir()) inv.setBoots(null);
+                else inv.setBoots(teamColored(personal.boots().clone(), team));
+            }
         }
-        return false;
+        return custom;
     }
 
     /** 死亡/离场前调用：背包和发下来的 kit 不一样（玩家自己调整过）→ 记为该玩家在该模式的个人 kit */
     public void recordPersonalKit(Player p) {
+        recordPersonalKit(p, null);
+    }
+
+    /**
+     * 带 deathDrops 的死亡路径：Paper 26.2 实测死亡事件触发时背包还在（下一 tick 才被清空），
+     * 但部分版本在事件前就把背包移进了掉落列表——那时背包快照为空，用掉落物重建以免把空背包记成个人 kit。
+     * 非死亡路径（退出/回大厅）传 null。
+     */
+    public void recordPersonalKit(Player p, List<ItemStack> deathDrops) {
         KitManager.Kit given = givenKit.remove(p.getUniqueId());
         if (given == null) return; // 没领过装备（排队中/幽灵等待/已阵亡）
         KitManager.Kit current = snapshotInventory(p);
-        if (kitEquals(current, given)) return; // 没动过：不记，继续跟随模式 kit（管理员改 kit 能同步）
-        plugin.playerKits().record(p.getUniqueId(), mode.id(), current);
+        if (isEmptyKit(current) && deathDrops != null && !deathDrops.isEmpty()) {
+            current = kitFromDrops(deathDrops);
+        }
+        if (kitEquals(current, given)) {
+            // 玩家把背包恢复成发下来的原样：清掉个人变化量，继续跟随模式 kit（管理员改动能同步）
+            if (plugin.playerKits().clear(p.getUniqueId(), mode.id())) {
+                Msg.send(p, "kit.personal-cleared", "mode", mode.display());
+            }
+            return;
+        }
+        // 只记变化量：与发下来的 kit 相同的槽位不记（进游戏时跟随原 kit 运算）
+        plugin.playerKits().record(p.getUniqueId(), mode.id(), kitDelta(given, current));
         Msg.send(p, "kit.personal-saved", mode.display());
+    }
+
+    /**
+     * 变化量：与发下来的 kit 逐槽位对比——
+     * 相同的槽位记 null（发放时跟随原 kit）、被清空的槽位记 AIR、其余记玩家调整后的内容。
+     */
+    private static KitManager.Kit kitDelta(KitManager.Kit given, KitManager.Kit current) {
+        List<ItemStack> storage = new ArrayList<>(36);
+        for (int i = 0; i < 36; i++) {
+            ItemStack g = given.storage().get(i);
+            ItemStack c = current.storage().get(i);
+            storage.add(itemEquals(g, c) ? null
+                    : (c == null ? new ItemStack(Material.AIR) : c));
+        }
+        return new KitManager.Kit(storage,
+                armorDelta(given.helmet(), current.helmet()),
+                armorDelta(given.chestplate(), current.chestplate()),
+                armorDelta(given.leggings(), current.leggings()),
+                armorDelta(given.boots(), current.boots()));
+    }
+
+    private static ItemStack armorDelta(ItemStack given, ItemStack current) {
+        return itemEquals(given, current) ? null
+                : (current == null ? new ItemStack(Material.AIR) : current);
+    }
+
+    /** 数量+类型+元数据都一致才算没变（AIR/空视为一致） */
+    private static boolean itemEquals(ItemStack a, ItemStack b) {
+        boolean aEmpty = a == null || a.getType().isAir();
+        boolean bEmpty = b == null || b.getType().isAir();
+        if (aEmpty && bEmpty) return true;
+        if (aEmpty != bEmpty) return false;
+        return b.isSimilar(a) && b.getAmount() == a.getAmount();
+    }
+
+    /** 快照是否完全没有物品（36 格 + 四件盔甲全空） */
+    private static boolean isEmptyKit(KitManager.Kit kit) {
+        for (ItemStack stack : kit.storage()) {
+            if (stack != null && !stack.getType().isAir()) return false;
+        }
+        return kit.helmet() == null && kit.chestplate() == null
+                && kit.leggings() == null && kit.boots() == null;
+    }
+
+    /** 从掉落物重建 kit 快照：盔甲按装备槽归类，其余按顺序填入背包格（掉落列表本身不带槽位信息） */
+    private static KitManager.Kit kitFromDrops(List<ItemStack> drops) {
+        List<ItemStack> storage = new ArrayList<>(36);
+        for (int i = 0; i < 36; i++) storage.add(null);
+        ItemStack helmet = null, chestplate = null, leggings = null, boots = null;
+        for (ItemStack drop : drops) {
+            if (drop == null || drop.getType().isAir()) continue;
+            switch (drop.getType().getEquipmentSlot()) {
+                case HEAD -> { if (helmet == null) helmet = drop.clone(); }
+                case CHEST -> { if (chestplate == null) chestplate = drop.clone(); }
+                case LEGS -> { if (leggings == null) leggings = drop.clone(); }
+                case FEET -> { if (boots == null) boots = drop.clone(); }
+                default -> {
+                    for (int i = 0; i < storage.size(); i++) {
+                        if (storage.get(i) == null) {
+                            storage.set(i, drop.clone());
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+        return new KitManager.Kit(storage, helmet, chestplate, leggings, boots);
     }
 
     /** 当前背包（36 格 + 四件盔甲）的完整快照 */
@@ -1212,31 +1359,35 @@ public class Game {
         return sb.toString();
     }
 
+    /** 记分板行（模板在 messages.yml 的 scoreboard.* 键，支持 & 颜色码） */
     public List<String> scoreboardLinesFor(Player p) {
         List<String> lines = new ArrayList<>();
-        lines.add("模式: " + mode.display());
-        lines.add("竞技场: " + arena.getName());
+        lines.add(Msg.text("scoreboard.mode", mode.display()));
+        lines.add(Msg.text("scoreboard.arena", arena.getName()));
         switch (state) {
-            case WAITING -> lines.add("等待玩家 " + players.size() + "/" + maxPlayers());
-            case STARTING -> lines.add("倒计时 " + countdownSeconds + "s");
-            case RUNNING -> lines.add("进行中");
-            case ENDING -> lines.add("已结束");
+            case WAITING -> lines.add(Msg.text("scoreboard.waiting", players.size(), maxPlayers()));
+            case STARTING -> lines.add(Msg.text("scoreboard.countdown", countdownSeconds));
+            case RUNNING -> lines.add(Msg.text("scoreboard.running"));
+            case ENDING -> lines.add(Msg.text("scoreboard.ended"));
         }
         if (state == GameState.RUNNING || state == GameState.STARTING) {
-            lines.add("存活 红" + aliveCount(Team.RED) + " 蓝" + aliveCount(Team.BLUE));
+            lines.add(Msg.text("scoreboard.alive", aliveCount(Team.RED), aliveCount(Team.BLUE)));
         }
         if (roundsTotal > 1) {
-            lines.add("局数 红" + roundWins.getOrDefault(Team.RED, 0)
-                    + " 蓝" + roundWins.getOrDefault(Team.BLUE, 0)
-                    + "（第" + roundsCurrent + "局）");
+            lines.add(Msg.text("scoreboard.rounds",
+                    roundWins.getOrDefault(Team.RED, 0),
+                    roundWins.getOrDefault(Team.BLUE, 0),
+                    roundsCurrent));
         }
         if (state == GameState.RUNNING && hasBeds()) {
-            lines.add("床 红" + (bedAlive(Team.RED) ? "✔" : "✘") + " 蓝" + (bedAlive(Team.BLUE) ? "✔" : "✘"));
+            lines.add(Msg.text("scoreboard.beds",
+                    Msg.text(bedAlive(Team.RED) ? "scoreboard.bed-yes" : "scoreboard.bed-no"),
+                    Msg.text(bedAlive(Team.BLUE) ? "scoreboard.bed-yes" : "scoreboard.bed-no")));
         }
         List<String> extra = new ArrayList<>();
         mode.addScoreboardLines(this, extra);
         lines.addAll(extra);
-        lines.add("击杀: " + kills.getOrDefault(p.getUniqueId(), 0));
+        lines.add(Msg.text("scoreboard.kills", kills.getOrDefault(p.getUniqueId(), 0)));
         return lines;
     }
 

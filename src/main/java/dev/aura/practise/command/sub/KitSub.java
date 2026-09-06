@@ -1,7 +1,6 @@
 package dev.aura.practise.command.sub;
 
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.List;
 
 import dev.aura.practise.PractiseAuraPlugin;
@@ -61,8 +60,25 @@ public class KitSub implements SubCommand {
                 Msg.send(p, "kit.forget-usage");
                 return;
             }
-            org.bukkit.OfflinePlayer target = org.bukkit.Bukkit.getOfflinePlayer(args[3]);
-            if (plugin.playerKits().clear(target.getUniqueId(), mode.id())) {
+            // 只按在线玩家名和本地缓存里的存档名解析；
+            // 不用 Bukkit.getOfflinePlayer(名字)——未知名字会触发阻塞式 Mojang API 查询（主线程）
+            java.util.UUID target = null;
+            for (Player online : plugin.getServer().getOnlinePlayers()) {
+                if (online.getName().equalsIgnoreCase(args[3])) {
+                    target = online.getUniqueId();
+                    break;
+                }
+            }
+            if (target == null) {
+                for (java.util.UUID id : plugin.playerKits().storedPlayers()) {
+                    String name = org.bukkit.Bukkit.getOfflinePlayer(id).getName();
+                    if (name != null && name.equalsIgnoreCase(args[3])) {
+                        target = id;
+                        break;
+                    }
+                }
+            }
+            if (target != null && plugin.playerKits().clear(target, mode.id())) {
                 Msg.send(p, "kit.forgot", args[3], mode.display());
             } else {
                 Msg.send(p, "kit.forgot-none", args[3], mode.display());
@@ -70,9 +86,13 @@ public class KitSub implements SubCommand {
             return;
         }
         org.bukkit.inventory.PlayerInventory inv = p.getInventory();
+        // 带 PDC 标记的大厅/排队物品（菜单剑、快速加入、退出排队染料）不存进 kit：会被原样发给全场玩家
+        List<org.bukkit.inventory.ItemStack> storage = new ArrayList<>();
+        for (org.bukkit.inventory.ItemStack stack : inv.getStorageContents()) {
+            storage.add(plugin.lobbyMenu().tagOf(stack) == null ? stack : null);
+        }
         plugin.kits().set(mode.id(), new dev.aura.practise.manager.KitManager.Kit(
-                new ArrayList<>(Arrays.asList(inv.getStorageContents())),
-                inv.getHelmet(), inv.getChestplate(), inv.getLeggings(), inv.getBoots()));
+                storage, inv.getHelmet(), inv.getChestplate(), inv.getLeggings(), inv.getBoots()));
         Msg.send(p, "kit.saved", mode.display());
         Msg.send(p, "kit.shared");
     }

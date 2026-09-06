@@ -1,5 +1,8 @@
 package dev.aura.practise.listener;
 
+import java.util.ArrayList;
+import java.util.List;
+
 import dev.aura.practise.PractiseAuraPlugin;
 import dev.aura.practise.command.sub.SettingSub;
 import dev.aura.practise.game.Arena;
@@ -15,6 +18,7 @@ import io.papermc.paper.event.player.AsyncChatEvent;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
 import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer;
+import org.bukkit.Bukkit;
 import org.bukkit.GameMode;
 import org.bukkit.Location;
 import org.bukkit.Material;
@@ -122,13 +126,19 @@ public class GameListener implements Listener {
     public void onDeath(PlayerDeathEvent e) {
         Player victim = e.getEntity();
         Game game = plugin.games().gameOf(victim.getUniqueId());
+        // 清空掉落前先留一份快照：万一所在版本在事件触发前就把背包移进了掉落列表，可据此重建死亡 kit
+        List<ItemStack> deathDrops = new ArrayList<>(e.getDrops().size());
+        for (ItemStack drop : e.getDrops()) {
+            deathDrops.add(drop == null ? null : drop.clone());
+        }
         e.getDrops().clear();
         e.setDroppedExp(0);
         if (game == null || game.state() != GameState.RUNNING || !game.isAlive(victim.getUniqueId())) {
             return;
         }
         e.deathMessage(Msg.component("game.death-message", victim.getName()));
-        game.recordPersonalKit(victim); // 死亡瞬间背包还在（下一 tick 被原版清空），调整过就记为个人 kit
+        // 死亡瞬间背包还在（Paper 26.2 下一 tick 才被原版清空）；若版本提前清空则由 recordPersonalKit 用掉落物兜底
+        game.recordPersonalKit(victim, deathDrops);
         new BukkitRunnable() {
             @Override
             public void run() {
@@ -213,7 +223,9 @@ public class GameListener implements Listener {
         if (e.getFrom().getBlockX() == e.getTo().getBlockX()
                 && e.getFrom().getBlockY() == e.getTo().getBlockY()
                 && e.getFrom().getBlockZ() == e.getTo().getBlockZ()) return;
-        e.setTo(e.getFrom().setDirection(e.getTo().getDirection()));
+        Location from = e.getFrom().clone(); // 不直接改事件返回的 Location，clone 后再设朝向
+        from.setDirection(e.getTo().getDirection());
+        e.setTo(from);
     }
 
     // ------------------------------------------------------------------
@@ -225,16 +237,13 @@ public class GameListener implements Listener {
         if (!(e.getEntity() instanceof Player p)) return;
         Game game = plugin.games().gameOf(p.getUniqueId());
         if (game == null) {
-            // 大厅保护：对所有玩家免伤（含 PVP），掉虚空则传回大厅
+            // 大厅保护：对所有玩家免伤（含 PVP），掉虚空则传回大厅（未设置大厅时回主世界出生点）
+            e.setCancelled(true);
             if (e.getCause() == EntityDamageEvent.DamageCause.VOID) {
-                Location lobby = plugin.lobby();
-                if (lobby != null) {
-                    e.setCancelled(true);
-                    p.setFallDistance(0f);
-                    p.teleport(lobby);
-                }
-            } else {
-                e.setCancelled(true);
+                Location target = plugin.lobby();
+                if (target == null) target = Bukkit.getWorlds().get(0).getSpawnLocation();
+                p.setFallDistance(0f);
+                p.teleport(target);
             }
             return;
         }
@@ -371,8 +380,10 @@ public class GameListener implements Listener {
             e.setCancelled(true);
             return;
         }
-        // 围床结构：可拆（每局开始会重新放置）
+        // 围床结构：可拆（每局开始会重新放置），但不掉落物品——防止每局重复刷取围床材料
         if (game.isGuardBlock(block)) {
+            e.setDropItems(false);
+            e.setExpToDrop(0);
             return;
         }
         // 玩家自己放的方块：按模式设置决定可否拆
@@ -485,8 +496,9 @@ public class GameListener implements Listener {
 
         Game game = plugin.games().gameOf(p.getUniqueId());
 
-        // 模式右键钩子（FireBallFight 发射火球等）
-        if (game != null && game.mode().onRightClick(game, p)) {
+        // 模式右键钩子（FireBallFight 发射火球等）：仅游戏进行中且玩家存活时交给模式处理
+        if (game != null && game.state() == GameState.RUNNING && game.isAlive(p.getUniqueId())
+                && game.mode().onRightClick(game, p)) {
             e.setCancelled(true);
             e.setUseItemInHand(Event.Result.DENY);
             e.setUseInteractedBlock(Event.Result.DENY);
@@ -554,7 +566,7 @@ public class GameListener implements Listener {
             kb.setY(powerY);
             victim.setVelocity(victim.getVelocity().add(kb));
             if (victim.equals(shooter)) continue; // 自己：只吃击退（火球跳），不掉血
-            if (game.teamOf(victim.getUniqueId()) == game.teamOf(shooter.getUniqueId())) continue; // 队友免疫
+            if (game.teamOf(victim.getUniqueId()) == game.teamOf(shooter.getUniqueId())) continue; // 队友免伤害（仍吃击退）
             if (damage > 0 && game.modeSettings().isDamageEnabled()) victim.damage(damage, shooter);
         }
     }

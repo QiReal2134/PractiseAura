@@ -8,8 +8,9 @@ import java.util.UUID;
 
 import dev.aura.practise.PractiseAuraPlugin;
 import dev.aura.practise.game.Game;
-import net.kyori.adventure.text.Component;
-import net.kyori.adventure.text.format.NamedTextColor;
+import dev.aura.practise.mode.ModeHandler;
+import dev.aura.practise.mode.ModeRegistry;
+import dev.aura.practise.util.Msg;
 import org.bukkit.Bukkit;
 import org.bukkit.entity.Player;
 import org.bukkit.scoreboard.DisplaySlot;
@@ -68,13 +69,15 @@ public class ScoreboardService {
         lastLines.remove(p.getUniqueId());
     }
 
+    /** 大厅行内容与查看者无关；模板在 messages.yml 的 scoreboard.* 键 */
     private List<String> lobbyLines() {
         List<String> lines = new ArrayList<>();
         lines.add("");
-        lines.add("在线: " + Bukkit.getOnlinePlayers().size());
+        lines.add(Msg.text("scoreboard.lobby-online", Bukkit.getOnlinePlayers().size()));
         lines.add("");
-        lines.add("> /pa join bedfight");
-        lines.add("> /pa join fireballfight");
+        for (ModeHandler mode : ModeRegistry.all()) {
+            lines.add(Msg.text("scoreboard.lobby-join", mode.id()));
+        }
         return lines;
     }
 
@@ -91,7 +94,7 @@ public class ScoreboardService {
         Objective obj = board.getObjective("practise");
         if (obj == null) {
             obj = board.registerNewObjective("practise", "dummy",
-                    Component.text("PractiseAura", NamedTextColor.AQUA));
+                    Msg.legacy(Msg.text("scoreboard.title")));
             obj.setDisplaySlot(DisplaySlot.SIDEBAR);
         }
         int used = Math.min(lines.size(), ENTRIES.length);
@@ -103,7 +106,8 @@ public class ScoreboardService {
                     lineTeam = board.registerNewTeam("line" + i);
                     lineTeam.addEntry(entry);
                 }
-                lineTeam.prefix(Component.text(lines.get(i)));
+                // Msg.legacy 解析 & 颜色码：scoreboard.* 消息键可以带颜色
+                lineTeam.prefix(Msg.legacy(lines.get(i)));
                 obj.getScore(entry).setScore(ENTRIES.length - i);
             } else {
                 board.resetScores(entry);

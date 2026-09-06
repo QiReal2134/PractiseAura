@@ -140,6 +140,10 @@ public class WorldCommand implements CommandExecutor, TabCompleter {
             return;
         }
         String name = args[1];
+        if (!name.matches("[A-Za-z0-9_\\-]{1,24}")) { // 与竞技场名同一套规则，防止路径里夹奇怪字符
+            Msg.send(sender, "create.bad-name");
+            return;
+        }
         if (Bukkit.getWorld(name) != null) {
             Msg.send(sender, "world.exists", name);
             return;
@@ -178,6 +182,10 @@ public class WorldCommand implements CommandExecutor, TabCompleter {
     }
 
     private void tp(CommandSender sender, String[] args) {
+        if (!sender.hasPermission(ADMIN_PERM)) {
+            Msg.send(sender, "error.no-permission");
+            return;
+        }
         if (!isPlayer(sender)) return;
         if (args.length < 2) {
             Msg.send(sender, "world.tp-usage");

@@ -46,7 +46,7 @@ public interface ModeHandler {
 
     /**
      * 玩家右键交互钩子（发射火球等）。返回 true 表示已处理（事件会被取消）。
-     * 游戏非 RUNNING 或玩家非存活时不会被调用。
+     * 仅游戏进行中（RUNNING）且玩家存活时被调用，监听器已保证，模式无需重复校验。
      */
     default boolean onRightClick(Game game, Player p) {
         return false;

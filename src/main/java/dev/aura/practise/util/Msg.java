@@ -28,12 +28,25 @@ public final class Msg {
         messages = msg;
     }
 
+    /** 占位符 {0} {1}...（预编译，消息发送热路径复用） */
+    private static final java.util.regex.Pattern PLACEHOLDER = java.util.regex.Pattern.compile("\\{(\\d+)}");
+
+    /**
+     * 单遍替换占位符：参数值里再出现 "{1}" 字样也不会被后续参数误替换
+     * （顺序 replace 会把前面参数值里的占位符样文本再次展开）。
+     */
     private static String raw(String key, Object... args) {
         String text = messages.get(key);
-        for (int i = 0; i < args.length; i++) {
-            text = text.replace("{" + i + "}", String.valueOf(args[i]));
+        if (args.length == 0) return text;
+        java.util.regex.Matcher m = PLACEHOLDER.matcher(text);
+        StringBuilder sb = new StringBuilder();
+        while (m.find()) {
+            int i = Integer.parseInt(m.group(1));
+            String replacement = i < args.length ? String.valueOf(args[i]) : m.group(0);
+            m.appendReplacement(sb, java.util.regex.Matcher.quoteReplacement(replacement));
         }
-        return text;
+        m.appendTail(sb);
+        return sb.toString();
     }
 
     /** & 和 § 颜色码 → Component */

@@ -10,7 +10,7 @@ import org.bukkit.block.data.BlockData;
 /**
  * 追踪一场游戏内玩家放置/破坏的方块，游戏结束后全部回滚。
  * 规则（零配置）：
- * - 玩家放置的方块：随时可拆、可被火球炸掉
+ * - 玩家放置的方块：随时可拆（爆炸不破坏任何方块——火球爆炸由插件完全接管，只做击退/伤害）
  * - 地图方块：默认受保护；竞技场配置了可建设区域（/pa setbuild）时区域内可拆
  * - 床：不受爆炸影响，只能由敌方玩家手动拆
  */
@@ -18,7 +18,7 @@ public class BlockTracker {
 
     /** 玩家放置方块的位置 -> 放置前该位置的方块（通常是 AIR） */
     private final Map<Location, BlockData> placed = new HashMap<>();
-    /** 玩家/火球破坏掉的地图方块位置 -> 原方块 */
+    /** 玩家破坏掉的地图方块位置 -> 原方块 */
     private final Map<Location, BlockData> broken = new HashMap<>();
 
     public void onPlace(Block block, BlockData replaced) {

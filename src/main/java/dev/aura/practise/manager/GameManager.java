@@ -63,6 +63,9 @@ public class GameManager {
         plugin.lastModes().remember(p.getUniqueId(), game.mode()); // 用于快速加入
         plugin.boards().showGame(p, game);
         Msg.send(p, "join.success", game.mode().display(), game.arena().getName());
+        if (game.state() == GameState.STARTING && game.isMatchCountdown()) {
+            game.refreshVisibility(); // 满员传送至出生点后立即互见，不等 start()
+        }
     }
 
     public void leave(Player p) {
@@ -164,11 +167,17 @@ public class GameManager {
             return false;
         }
         if (!game.addPlayer(b)) {
-            game.disband();
+            // a 已被 addPlayer 清空背包并进入排队：先按参与者登记再走 leave，
+            // 恢复 a 的大厅状态（leave 内部会对空场 disband 并把 a 送回大厅）
+            byPlayer.put(a.getUniqueId(), game);
+            leave(a);
             return false;
         }
         byPlayer.put(a.getUniqueId(), game);
         byPlayer.put(b.getUniqueId(), game);
+        if (game.state() == GameState.STARTING && game.isMatchCountdown()) {
+            game.refreshVisibility(); // duel 满员传送至出生点后立即互见，不等 start()
+        }
         plugin.lastModes().remember(a.getUniqueId(), mode);
         plugin.lastModes().remember(b.getUniqueId(), mode);
         plugin.boards().showGame(a, game);

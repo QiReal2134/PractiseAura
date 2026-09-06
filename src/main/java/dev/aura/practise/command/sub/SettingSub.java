@@ -124,9 +124,27 @@ public class SettingSub implements SubCommand {
             parsed = d;
         }
         plugin.getConfig().set("settings." + key, parsed);
+        plugin.settings().refresh(); // 先刷新，把越界值 clamp 到实际生效的范围
+        // 把 clamp 后的生效值写回 config：文件内容与实际行为一致，整数也不会以 2.0 形式落盘
+        String effective = value(plugin, key);
+        if (effective.equalsIgnoreCase("true") || effective.equalsIgnoreCase("false")) {
+            plugin.getConfig().set("settings." + key, Boolean.parseBoolean(effective));
+        } else {
+            try {
+                double d = Double.parseDouble(effective);
+                if (effective.indexOf('.') < 0) {
+                    // Integer 落盘（三元表达式会把 long 提升回 double，写成 30.0）
+                    plugin.getConfig().set("settings." + key, (int) d);
+                } else {
+                    plugin.getConfig().set("settings." + key, d);
+                }
+            } catch (NumberFormatException ignored) {
+                // value() 意外返回非数值时保留第一次写入的原始值
+            }
+        }
         plugin.saveConfig();
-        plugin.settings().refresh(); // 刷新缓存，立即生效
-        String shown = value.equals("0") ? "0（关闭）" : value;
+        plugin.settings().refresh(); // 以落盘后的配置为准再对齐一次缓存
+        String shown = effective.equals("0") ? "0（关闭）" : effective;
         Msg.send(to, "setting.applied", key, shown);
     }
 
