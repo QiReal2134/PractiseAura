@@ -149,7 +149,6 @@ public class SetupSub implements SubCommand {
         out.addAll(plugin.arenas().names());
         return out;
     }
-}
 
     private void menuLine(Player p, String label, boolean ok, String cmd, String hover) {
         p.sendMessage(Component.text(" ", NamedTextColor.GRAY)

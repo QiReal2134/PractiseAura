@@ -550,6 +550,37 @@ public class Game {
         return false;
     }
 
+    /**
+     * 插件内部死亡（不走原版死亡，无死亡界面/重生加载屏）：
+     * 记录个人 kit 变化量 → 结算播报 → 按是否可重生进入幽灵等待或淘汰旁观。
+     * fromVoid = 掉落虚空所致（先把人从虚空里拉出来）。
+     */
+    public void customDeath(Player victim, boolean fromVoid) {
+        if (state != GameState.RUNNING) return;
+        Team team = teamOf(victim.getUniqueId());
+        if (team == null || !isAlive(victim.getUniqueId())) return;
+        recordPersonalKit(victim);
+        clearInventory(victim);
+        handleDeath(victim); // 移出存活、击杀归属、播报、结算（可能直接结束/开下一局）
+        if (state != GameState.RUNNING) return; // 本局已结束或进入下一局：后续由回大厅/新一局接管
+        Location spawn = pos().spawn(team);
+        if (shouldRespawn(victim)) {
+            // 幽灵等待：回出生点，隐身+飞行+无敌+无碰撞，倒计时结束满配重生
+            if (fromVoid || spawn == null) {
+                if (spawn != null && !LocUtil.sameBlock(victim.getLocation(), spawn)) {
+                    victim.setFallDistance(0f);
+                    victim.teleport(spawn);
+                }
+            }
+            beginGhostRespawn(victim, team);
+        } else {
+            // 淘汰：旁观模式到观战点，等待对局结束
+            Location spec = arena.spectatorPoint(position);
+            if (spec != null) victim.teleport(spec);
+            victim.setGameMode(GameMode.SPECTATOR);
+        }
+    }
+
     private int teamCount(Team team) {
         int n = 0;
         for (Team t : players.values()) {
@@ -778,7 +809,7 @@ public class Game {
             double spawnY = pos.spawnY(entry.getValue());
             if (Double.isNaN(spawnY)) continue;
             if (p.getLocation().getY() < spawnY - below) {
-                p.setHealth(0.0); // 走正常死亡流程（有床则进入重生等待）
+                customDeath(p, true); // 插件内部死亡：不掉虚空、无死亡界面、无加载屏
             }
         }
     }

@@ -279,6 +279,13 @@ public class GameListener implements Listener {
         }
         if (e.getCause() == EntityDamageEvent.DamageCause.FALL) {
             e.setCancelled(true); // 无摔落伤害
+            return;
+        }
+        // 致命伤害拦截：不走原版死亡（无死亡界面/重生加载屏），改由插件内部完成幽灵/淘汰流程
+        if (p.getHealth() - e.getFinalDamage() <= 0) {
+            e.setCancelled(true);
+            game.customDeath(p, e.getCause() == EntityDamageEvent.DamageCause.VOID);
+            return;
         }
         // VOID 等其余伤害放行 → 走正常死亡流程
     }
