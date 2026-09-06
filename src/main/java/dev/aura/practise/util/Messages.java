@@ -136,6 +136,11 @@ public class Messages {
         // 管理：竞技场
         d.put("setup.usage", "&7用法: /pa setup <名字>");
         d.put("setup.in-use-hint", "&7提示: 该竞技场有进行中的对局，本次修改对下一局生效");
+        d.put("setup.entered", "&a已进入 {0} 的配置模式（/pa setup leave 退出；配置命令仅此模式可用）");
+        d.put("setup.left", "&7已退出 {0} 的配置模式");
+        d.put("setup.not-setuping", "&c你未进入配置模式：先 /pa setup <场名>");
+        d.put("setup.wrong-arena", "&c你正在配置的是 {0}，请先 leave 再切换场地");
+        d.put("state.blocked", "&c当前状态 [{0}] 无法使用 /pa {1}");
         d.put("setup.not-bed", "&c请左键点击一张床");
         d.put("setup.lobby-set", "&7已把当前位置设为大厅出生点");
         d.put("setup.kit-hint", "&7kit 为按模式设置: /pa kit <模式> [clear]（对该模式所有竞技场生效）");

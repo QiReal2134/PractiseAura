@@ -53,6 +53,21 @@ public final class CmdUtil {
         return false;
     }
 
+    /** 配置类命令守卫：管理员必须处于该场的配置模式（/pa setup <名> 进入） */
+    public static boolean checkSetupArena(PractiseAuraPlugin plugin, CommandSender sender, Arena arena) {
+        if (!(sender instanceof Player p)) return true;
+        String setuping = plugin.setuping().get(p.getUniqueId());
+        if (setuping == null) {
+            Msg.send(p, "setup.not-setuping", "arena", arena.getName());
+            return false;
+        }
+        if (!setuping.equalsIgnoreCase(arena.getName())) {
+            Msg.send(p, "setup.wrong-arena", "arena", setuping);
+            return false;
+        }
+        return true;
+    }
+
     /** 解析可选的组号参数（默认 1，范围 1-16） */
     public static int parseGroup(String[] args, int index) {
         if (args.length <= index) return 1;

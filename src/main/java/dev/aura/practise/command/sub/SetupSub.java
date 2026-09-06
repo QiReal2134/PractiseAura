@@ -4,6 +4,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 import dev.aura.practise.PractiseAuraPlugin;
+import dev.aura.practise.game.PlayerState;
 import dev.aura.practise.command.CmdUtil;
 import dev.aura.practise.command.SubCommand;
 import dev.aura.practise.game.Arena;
@@ -21,6 +22,11 @@ import org.bukkit.entity.Player;
 public class SetupSub implements SubCommand {
 
     @Override
+    public java.util.Set<PlayerState> states() {
+        return java.util.EnumSet.of(PlayerState.LOBBYING, PlayerState.SETUPING);
+    }
+
+    @Override
     public String name() {
         return "setup";
     }
@@ -32,7 +38,7 @@ public class SetupSub implements SubCommand {
 
     @Override
     public String params() {
-        return "<名字>";
+        return "<名字|leave>";
     }
 
     @Override
@@ -53,12 +59,22 @@ public class SetupSub implements SubCommand {
             Msg.send(p, "setup.usage");
             return;
         }
+        if (args[1].equalsIgnoreCase("leave")) {
+            String leaving = plugin.setuping().remove(p.getUniqueId());
+            if (leaving == null) {
+                Msg.send(p, "setup.not-setuping");
+            } else {
+                Msg.send(p, "setup.left", leaving);
+            }
+            return;
+        }
         Arena arena = plugin.arenas().get(args[1]);
         if (arena == null) {
             Msg.send(p, "error.arena-missing", args[1]);
             return;
         }
         if (!CmdUtil.teleportToArenaWorld(plugin, p, arena)) return;
+        plugin.setuping().put(p.getUniqueId(), arena.getName()); // 进入该场的配置模式
         String name = arena.getName();
         p.sendMessage(Msg.plain("=== " + name + " [" + arena.getType().display() + "] 配置 ===", NamedTextColor.AQUA));
         p.sendMessage(arena.isReady()
@@ -124,6 +140,16 @@ public class SetupSub implements SubCommand {
         p.sendMessage(Msg.plain("kit 为按模式设置: /pa kit <模式> [clear]（对该模式所有竞技场生效）",
                 NamedTextColor.GRAY));
     }
+
+    @Override
+    public List<String> tab(PractiseAuraPlugin plugin, CommandSender sender, String[] args) {
+        if (args.length != 2) return List.of();
+        List<String> out = new ArrayList<>();
+        out.add("leave");
+        out.addAll(plugin.arenas().names());
+        return out;
+    }
+}
 
     private void menuLine(Player p, String label, boolean ok, String cmd, String hover) {
         p.sendMessage(Component.text(" ", NamedTextColor.GRAY)

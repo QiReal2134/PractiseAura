@@ -8,8 +8,10 @@ import java.util.Map;
 import java.util.Set;
 
 import dev.aura.practise.PractiseAuraPlugin;
+import dev.aura.practise.game.PlayerState;
 import dev.aura.practise.util.Msg;
 import org.bukkit.command.Command;
+import org.bukkit.entity.Player;
 import org.bukkit.command.CommandExecutor;
 import org.bukkit.command.CommandSender;
 import org.bukkit.command.TabCompleter;
@@ -48,11 +50,18 @@ public class CommandDispatcher implements CommandExecutor, TabCompleter {
 
     private void help(CommandSender sender) {
         Msg.send(sender, "help.header");
+        PlayerState state = sender instanceof Player p ? PlayerState.of(plugin, p) : null;
         for (SubCommand sub : distinct()) {
             if (!visible(sender, sub)) continue;
+            if (state != null && !stateAllowed(state, sub)) continue; // 当前状态不可用的不显示
             String params = sub.params().isEmpty() ? "" : " " + sub.params();
             Msg.send(sender, "help.entry", sub.name(), params, sub.description());
         }
+    }
+
+    /** 玩家当前状态是否允许该子命令（控制台/无状态限制恒真） */
+    private boolean stateAllowed(PlayerState state, SubCommand sub) {
+        return sub.states().contains(state);
     }
 
     @Override
@@ -70,16 +79,23 @@ public class CommandDispatcher implements CommandExecutor, TabCompleter {
             Msg.send(sender, "error.no-permission");
             return true;
         }
+        if (sender instanceof Player p && !sub.states().contains(PlayerState.of(plugin, p))) {
+            Msg.send(sender, "state.blocked",
+                    PlayerState.of(plugin, p).display(), sub.name());
+            return true;
+        }
         sub.execute(plugin, sender, args);
         return true;
     }
 
     @Override
     public List<String> onTabComplete(CommandSender sender, Command command, String alias, String[] args) {
+        PlayerState state = sender instanceof Player p ? PlayerState.of(plugin, p) : null;
         if (args.length <= 1) {
             List<String> out = new ArrayList<>();
             for (SubCommand sub : distinct()) {
                 if (!visible(sender, sub)) continue;
+                if (state != null && !stateAllowed(state, sub)) continue; // 按状态动态过滤
                 out.add(sub.name());
                 out.addAll(sub.aliases()); // 别名（如 arenas/lobby）也参与补全
             }

@@ -4,6 +4,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 import dev.aura.practise.PractiseAuraPlugin;
+import dev.aura.practise.game.PlayerState;
 import dev.aura.practise.command.CmdUtil;
 import dev.aura.practise.command.SubCommand;
 import dev.aura.practise.game.Arena;
@@ -27,6 +28,11 @@ public class GenVoidSub implements SubCommand {
     private static final int HEIGHT = 100;   // 平台方块所在 Y
     private static final int SIZE = 5;       // 平台半径（11x11）
     private static final int DISTANCE = 25;  // 岛中心距原点
+
+    @Override
+    public java.util.Set<PlayerState> states() {
+        return java.util.EnumSet.of(PlayerState.LOBBYING);
+    }
 
     @Override
     public String name() {

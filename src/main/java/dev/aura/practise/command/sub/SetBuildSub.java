@@ -5,6 +5,7 @@ import java.util.List;
 import java.util.Locale;
 
 import dev.aura.practise.PractiseAuraPlugin;
+import dev.aura.practise.game.PlayerState;
 import dev.aura.practise.command.CmdUtil;
 import dev.aura.practise.command.SubCommand;
 import dev.aura.practise.game.Arena;
@@ -14,6 +15,11 @@ import org.bukkit.entity.Player;
 
 /** /pa setbuild —— 设置可挖掘区域对角点（区域内地图方块可破坏） */
 public class SetBuildSub implements SubCommand {
+
+    @Override
+    public java.util.Set<PlayerState> states() {
+        return java.util.EnumSet.of(PlayerState.SETUPING);
+    }
 
     @Override
     public String name() {
@@ -58,6 +64,7 @@ public class SetBuildSub implements SubCommand {
                 return;
             }
         }
+        if (!CmdUtil.checkSetupArena(plugin, p, arena)) return;
         if (!CmdUtil.teleportToArenaWorld(plugin, p, arena)) return;
         arena.setBuildPos(index, p.getLocation());
         plugin.arenas().saveAll();

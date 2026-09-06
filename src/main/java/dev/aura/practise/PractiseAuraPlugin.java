@@ -59,6 +59,8 @@ public final class PractiseAuraPlugin extends JavaPlugin {
     private final Map<UUID, PendingSetting> pendingSettings = new ConcurrentHashMap<>();
     private final Map<UUID, PendingDuel> duelInvites = new ConcurrentHashMap<>();
     private final Map<UUID, Long> duelCooldowns = new ConcurrentHashMap<>();
+    /** 管理员配置模式：UUID → 正在配置的竞技场名（/pa setup 进入，/pa setup leave 退出） */
+    private final Map<UUID, String> setuping = new ConcurrentHashMap<>();
 
     @Override
     public void onEnable() {
@@ -209,6 +211,10 @@ public final class PractiseAuraPlugin extends JavaPlugin {
 
     public Map<UUID, Long> duelCooldowns() {
         return duelCooldowns;
+    }
+
+    public Map<UUID, String> setuping() {
+        return setuping;
     }
 
     public void setLobby(Location loc) {

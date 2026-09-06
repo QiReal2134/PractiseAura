@@ -4,6 +4,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 import dev.aura.practise.PractiseAuraPlugin;
+import dev.aura.practise.game.PlayerState;
 import dev.aura.practise.command.CmdUtil;
 import dev.aura.practise.command.SubCommand;
 import dev.aura.practise.mode.ModeHandler;
@@ -14,6 +15,11 @@ import org.bukkit.entity.Player;
 
 /** /pa kit —— 把当前背包+盔甲存为模式级 kit（该模式所有竞技场共用） */
 public class KitSub implements SubCommand {
+
+    @Override
+    public java.util.Set<PlayerState> states() {
+        return java.util.EnumSet.of(PlayerState.LOBBYING, PlayerState.SETUPING);
+    }
 
     @Override
     public String name() {

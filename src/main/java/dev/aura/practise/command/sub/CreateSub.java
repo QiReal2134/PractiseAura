@@ -4,6 +4,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 import dev.aura.practise.PractiseAuraPlugin;
+import dev.aura.practise.game.PlayerState;
 import dev.aura.practise.command.CmdUtil;
 import dev.aura.practise.command.SubCommand;
 import dev.aura.practise.game.Arena;
@@ -14,6 +15,11 @@ import org.bukkit.command.CommandSender;
 
 /** /pa create —— 创建竞技场 */
 public class CreateSub implements SubCommand {
+
+    @Override
+    public java.util.Set<PlayerState> states() {
+        return java.util.EnumSet.of(PlayerState.LOBBYING);
+    }
 
     @Override
     public String name() {

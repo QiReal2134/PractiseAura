@@ -4,6 +4,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 import dev.aura.practise.PractiseAuraPlugin;
+import dev.aura.practise.game.PlayerState;
 import dev.aura.practise.command.CmdUtil;
 import dev.aura.practise.command.SubCommand;
 import dev.aura.practise.game.Arena;
@@ -15,6 +16,11 @@ import org.bukkit.entity.Player;
 
 /** /pa setbed —— 设置某组点位的床（执行后 60 秒内左键点击目标床） */
 public class SetBedSub implements SubCommand {
+
+    @Override
+    public java.util.Set<PlayerState> states() {
+        return java.util.EnumSet.of(PlayerState.SETUPING);
+    }
 
     @Override
     public String name() {
@@ -57,6 +63,7 @@ public class SetBedSub implements SubCommand {
         }
         int group = CmdUtil.parseGroup(args, 3);
         arena.ensurePosition(group);
+        if (!CmdUtil.checkSetupArena(plugin, p, arena)) return;
         if (!CmdUtil.teleportToArenaWorld(plugin, p, arena)) return;
         plugin.pendingBeds().put(p.getUniqueId(),
                 new PendingBed(arena.getName(), team, group, System.currentTimeMillis() + 60_000L));

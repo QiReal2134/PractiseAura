@@ -4,6 +4,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 import dev.aura.practise.PractiseAuraPlugin;
+import dev.aura.practise.game.PlayerState;
 import dev.aura.practise.command.CmdUtil;
 import dev.aura.practise.command.SubCommand;
 import dev.aura.practise.game.Arena;
@@ -14,6 +15,11 @@ import org.bukkit.entity.Player;
 
 /** /pa setspawn —— 设置某组点位的队伍出生点（站在出生点执行） */
 public class SetSpawnSub implements SubCommand {
+
+    @Override
+    public java.util.Set<PlayerState> states() {
+        return java.util.EnumSet.of(PlayerState.SETUPING);
+    }
 
     @Override
     public String name() {
@@ -56,6 +62,7 @@ public class SetSpawnSub implements SubCommand {
         }
         int group = CmdUtil.parseGroup(args, 3);
         arena.ensurePosition(group);
+        if (!CmdUtil.checkSetupArena(plugin, p, arena)) return;
         // 未带组号且地图已有配置时：自动传送到地图世界，防止配错世界
         if (args.length <= 3 && arena.firstSpawn() != null
                 && !CmdUtil.teleportToArenaWorld(plugin, p, arena)) {

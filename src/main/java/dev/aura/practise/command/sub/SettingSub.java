@@ -6,6 +6,7 @@ import java.util.Locale;
 import java.util.Map;
 
 import dev.aura.practise.PractiseAuraPlugin;
+import dev.aura.practise.game.PlayerState;
 import dev.aura.practise.command.CmdUtil;
 import dev.aura.practise.command.SubCommand;
 import dev.aura.practise.game.PendingSetting;
@@ -45,6 +46,11 @@ public class SettingSub implements SubCommand {
             Map.entry("kit-blocks", List.of("16", "24", "32", "48")),
             Map.entry("guard-scan-radius", List.of("3", "4", "5", "6")),
             Map.entry("show-admin-commands", List.of("true", "false")));
+
+    @Override
+    public java.util.Set<PlayerState> states() {
+        return java.util.EnumSet.of(PlayerState.LOBBYING, PlayerState.SETUPING);
+    }
 
     @Override
     public String name() {

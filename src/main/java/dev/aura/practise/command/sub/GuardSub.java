@@ -4,6 +4,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 import dev.aura.practise.PractiseAuraPlugin;
+import dev.aura.practise.game.PlayerState;
 import dev.aura.practise.command.CmdUtil;
 import dev.aura.practise.command.SubCommand;
 import dev.aura.practise.game.Arena;
@@ -22,6 +23,11 @@ import org.bukkit.entity.Player;
 
 /** /pa guard —— 记录/清除围床结构（ready 记录并自动同步两床，局内可拆可炸） */
 public class GuardSub implements SubCommand {
+
+    @Override
+    public java.util.Set<PlayerState> states() {
+        return java.util.EnumSet.of(PlayerState.SETUPING);
+    }
 
     @Override
     public String name() {
@@ -72,6 +78,7 @@ public class GuardSub implements SubCommand {
             Msg.send(p, "guard.beds-missing");
             return;
         }
+        if (!CmdUtil.checkSetupArena(plugin, p, arena)) return;
         if (!CmdUtil.teleportToArenaWorld(plugin, p, arena)) return;
         if (!arena.getType().settings().isNeedsGuard()) {
             Msg.send(p, "guard.disabled-hint",

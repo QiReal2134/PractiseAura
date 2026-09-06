@@ -99,6 +99,7 @@ public class GameListener implements Listener {
         plugin.lastModes().forget(p.getUniqueId());
         plugin.duelInvites().remove(p.getUniqueId()); // 以该玩家为目标的约战邀请
         plugin.duelCooldowns().remove(p.getUniqueId());
+        plugin.setuping().remove(p.getUniqueId()); // 退出配置模式
     }
 
     /** 聊天输入模式：玩家点击设置项后，下一条聊天消息作为数值（本事件在异步聊天线程触发） */

@@ -1,6 +1,7 @@
 package dev.aura.practise.command.sub;
 
 import dev.aura.practise.PractiseAuraPlugin;
+import dev.aura.practise.game.PlayerState;
 import dev.aura.practise.command.CmdUtil;
 import dev.aura.practise.command.SubCommand;
 import dev.aura.practise.util.Msg;
@@ -9,6 +10,11 @@ import org.bukkit.entity.Player;
 
 /** /pa leave —— 离开当前游戏/排队 */
 public class LeaveSub implements SubCommand {
+
+    @Override
+    public java.util.Set<PlayerState> states() {
+        return java.util.EnumSet.of(PlayerState.WAITING, PlayerState.GAMING, PlayerState.DIED);
+    }
 
     @Override
     public String name() {

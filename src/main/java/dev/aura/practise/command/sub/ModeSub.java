@@ -5,6 +5,7 @@ import java.util.List;
 import java.util.Locale;
 
 import dev.aura.practise.PractiseAuraPlugin;
+import dev.aura.practise.game.PlayerState;
 import dev.aura.practise.command.CmdUtil;
 import dev.aura.practise.command.SubCommand;
 import dev.aura.practise.mode.ModeHandler;
@@ -18,6 +19,11 @@ public class ModeSub implements SubCommand {
     private static final List<String> FLAGS = List.of(
             "needs-beds", "needs-guard", "damage", "pvp",
             "allow-break-map", "allow-break-placed", "allow-place", "void-kill");
+
+    @Override
+    public java.util.Set<PlayerState> states() {
+        return java.util.EnumSet.of(PlayerState.LOBBYING, PlayerState.SETUPING);
+    }
 
     @Override
     public String name() {
