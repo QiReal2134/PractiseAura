@@ -60,7 +60,7 @@ public class GameManager {
             return;
         }
         byPlayer.put(p.getUniqueId(), game);
-        plugin.lobbyMenu().rememberLastGame(p.getUniqueId(), game.mode()); // 用于快速加入
+        plugin.lastModes().remember(p.getUniqueId(), game.mode()); // 用于快速加入
         plugin.boards().showGame(p, game);
         Msg.send(p, "join.success", game.mode().display(), game.arena().getName());
     }
@@ -169,8 +169,8 @@ public class GameManager {
         }
         byPlayer.put(a.getUniqueId(), game);
         byPlayer.put(b.getUniqueId(), game);
-        plugin.lobbyMenu().rememberLastGame(a.getUniqueId(), mode);
-        plugin.lobbyMenu().rememberLastGame(b.getUniqueId(), mode);
+        plugin.lastModes().remember(a.getUniqueId(), mode);
+        plugin.lastModes().remember(b.getUniqueId(), mode);
         plugin.boards().showGame(a, game);
         plugin.boards().showGame(b, game);
         return true;

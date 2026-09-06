@@ -1,11 +1,5 @@
 package dev.aura.practise.menu;
 
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.UUID;
-
 import dev.aura.practise.PractiseAuraPlugin;
 import dev.aura.practise.mode.ModeHandler;
 import dev.aura.practise.mode.ModeRegistry;
@@ -28,24 +22,10 @@ public class LobbyMenu {
     /** 标记菜单物品用途的 PDC 键 */
     private final NamespacedKey tagKey;
     private final PractiseAuraPlugin plugin;
-    private final Map<UUID, ModeHandler> lastGame = new HashMap<>();
 
     public LobbyMenu(PractiseAuraPlugin plugin) {
         this.plugin = plugin;
         this.tagKey = new NamespacedKey(plugin, "menuitem");
-    }
-
-    /** 记住玩家上次玩的模式（用于快速加入/约战默认模式），退出时由监听器清除 */
-    public void rememberLastGame(UUID id, ModeHandler mode) {
-        if (mode != null) lastGame.put(id, mode);
-    }
-
-    public ModeHandler lastGameOf(UUID id) {
-        return lastGame.get(id);
-    }
-
-    public void forgetLastGame(UUID id) {
-        lastGame.remove(id);
     }
 
     // ------------------------------------------------------------------
@@ -64,12 +44,12 @@ public class LobbyMenu {
                 "menu",
                 Msg.legacy(Msg.text("menu.item-title")),
                 Msg.legacy(Msg.text("menu.item-lore-1"))));
-        ModeHandler last = lastGame.get(p.getUniqueId());
+        ModeHandler last = plugin.lastModes().lastOf(p.getUniqueId());
         if (last != null) {
             p.getInventory().setItem(1, tagged(
                     plugin.settings().rejoinItem(),
                     "rejoin",
-                    Msg.legacy(Msg.text("rejoin.title", "mode", last.display())),
+                    Msg.legacy(Msg.text("rejoin.title", last.display())),
                     Msg.legacy(Msg.text("rejoin.lore"))));
         }
     }
@@ -111,11 +91,10 @@ public class LobbyMenu {
     }
 
     public void open(Player p) {
-        List<ModeHandler> modes = new ArrayList<>(ModeRegistry.all());
         Inventory menu = Bukkit.createInventory(new Holder(), 9,
                 Msg.legacy(Msg.text("menu.title")));
         int slot = 0;
-        for (ModeHandler mode : modes) {
+        for (ModeHandler mode : ModeRegistry.all()) { // 直接遍历注册表视图，不复制
             if (slot >= 9) break; // 一页最多 9 个，多了以后再做翻页
             menu.setItem(slot++, modeItem(mode));
         }
@@ -136,8 +115,11 @@ public class LobbyMenu {
 
     /** 菜单内点击：按槽位顺序对应 ModeRegistry 注册顺序，非模式槽位返回 null */
     public ModeHandler modeFromSlot(int slot) {
-        List<ModeHandler> modes = new ArrayList<>(ModeRegistry.all());
-        if (slot < 0 || slot >= modes.size()) return null;
-        return modes.get(slot);
+        if (slot < 0) return null;
+        int i = 0;
+        for (ModeHandler mode : ModeRegistry.all()) { // 直接遍历，免每次点击复制列表
+            if (i++ == slot) return mode;
+        }
+        return null;
     }
 }

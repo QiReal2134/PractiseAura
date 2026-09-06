@@ -61,7 +61,7 @@ public class SetBuildSub implements SubCommand {
         if (!CmdUtil.teleportToArenaWorld(plugin, p, arena)) return;
         arena.setBuildPos(index, p.getLocation());
         plugin.arenas().saveAll();
-        Msg.send(p, "setbuild.success", arena.getName(), String.valueOf(index));
+        Msg.send(p, "setbuild.success", arena.getName(), index);
         Msg.send(p, arena.hasBuildRegion() ? "setbuild.done" : "setbuild.need-other");
     }
 

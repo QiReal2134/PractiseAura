@@ -74,8 +74,7 @@ public class GenVoidSub implements SubCommand {
         world.save(); // 立即落盘：虚空区块不自动保存，否则重启后地图重置
         plugin.arenas().saveAll();
         Msg.send(sender, "genvoid.success",
-                "name", arena.getName(), "world", world.getName(),
-                "distance", String.valueOf(DISTANCE), "height", String.valueOf(HEIGHT));
+                arena.getName(), world.getName(), DISTANCE, HEIGHT);
         Msg.send(sender, "genvoid.hint");
         if (sender instanceof Player p) {
             p.teleport(pos.spawn(Team.RED));

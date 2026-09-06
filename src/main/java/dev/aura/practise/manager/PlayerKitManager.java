@@ -10,13 +10,15 @@ import org.bukkit.configuration.file.YamlConfiguration;
 
 /**
  * 玩家个人 kit：对局中玩家自己调整过背包（与发下来的 kit 不同）则按 (玩家, 模式) 自动记录，
- * 下次进入该模式对局优先使用。playerkits.yml 持久化，写穿式保存（记录/清除即落盘）。
+ * 下次进入该模式对局优先使用。playerkits.yml 持久化；记录/清除只标脏，
+ * 由定时任务（30 秒）和关服钩子落盘——对局内的死亡/退出路径零磁盘 I/O。
  */
 public class PlayerKitManager {
 
     private final PractiseAuraPlugin plugin;
     private final Map<UUID, Map<String, KitManager.Kit>> kits = new HashMap<>();
     private File file;
+    private boolean dirty = false;
 
     public PlayerKitManager(PractiseAuraPlugin plugin) {
         this.plugin = plugin;
@@ -55,7 +57,7 @@ public class PlayerKitManager {
 
     public void record(UUID playerId, String modeId, KitManager.Kit kit) {
         kits.computeIfAbsent(playerId, k -> new HashMap<>()).put(modeId.toLowerCase(), KitManager.copy(kit));
-        save();
+        dirty = true;
     }
 
     /** 清除个人 kit，返回是否确有可删的 */
@@ -63,8 +65,15 @@ public class PlayerKitManager {
         Map<String, KitManager.Kit> byMode = kits.get(playerId);
         if (byMode == null || byMode.remove(modeId.toLowerCase()) == null) return false;
         if (byMode.isEmpty()) kits.remove(playerId);
-        save();
+        dirty = true;
         return true;
+    }
+
+    /** 有未落盘的改动才写文件（30 秒定时任务 + onDisable 兜底） */
+    public void flushIfDirty() {
+        if (!dirty) return;
+        save();
+        dirty = false;
     }
 
     public synchronized void save() {

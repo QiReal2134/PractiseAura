@@ -79,7 +79,7 @@ public class DuelSub implements SubCommand {
                 return;
             }
         } else {
-            ModeHandler last = plugin.lobbyMenu().lastGameOf(p.getUniqueId());
+            ModeHandler last = plugin.lastModes().lastOf(p.getUniqueId());
             mode = last != null ? last : ModeRegistry.get("bedfight");
         }
         int rounds = 1;
@@ -111,8 +111,8 @@ public class DuelSub implements SubCommand {
                 new PendingDuel(p.getUniqueId(), mode, rounds,
                         now + plugin.settings().duelInviteSeconds() * 1000L));
         Msg.send(p, "duel.sent",
-                "target", target.getName(), "mode", mode.display(),
-                "info", rounds > 1 ? rounds + " 局制，" : "");
+                target.getName(), mode.display(),
+                rounds > 1 ? rounds + " 局制，" : "");
         target.sendMessage(Msg.prefix()
                 .append(Msg.component("duel.invite",
                         p.getName(), mode.display(), rounds > 1 ? "（" + rounds + " 局制）" : ""))

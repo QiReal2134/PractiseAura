@@ -24,10 +24,15 @@ public class Messages {
         this.plugin = plugin;
     }
 
+    /** 内置默认表只构建一次（类加载时），缓存 miss 回退不至于每次重建 180+ 项 */
+    private static final Map<String, String> DEFAULTS = buildDefaults();
+
     /** 默认消息（键 → 文本，占位符 {0} {1}...）。修改默认文案改这里。 */
-    private static Map<String, String> defaults() {
+    private static Map<String, String> buildDefaults() {
         Map<String, String> d = new LinkedHashMap<>();
         d.put("prefix", "&8[&bAura&8] ");
+        d.put("help.header", "&b--- PractiseAura ---");
+        d.put("help.entry", "&f/pa {0}{1} &8- &7{2}");
         // 通用
         d.put("error.player-only", "&c该命令仅玩家可用");
         d.put("error.no-permission", "&c你没有权限");
@@ -44,6 +49,7 @@ public class Messages {
         d.put("join.failed", "&c加入失败，游戏已满或已开始");
         d.put("join.success", "&7已加入 &f{0} &7[&f{1}&7]");
         d.put("join.not-in-game", "&7你当前不在任何游戏中");
+        d.put("join.unknown-mode", "&c未知模式: {0}（可选 {1}）");
         d.put("game.joined", "&f{0} &7加入了排队 (&f{1}&7/&f{2}&7)");
         d.put("game.left", "&f{0} &7离开了游戏");
         d.put("game.quit", "&f{0} &7退出了游戏");
@@ -129,6 +135,8 @@ public class Messages {
         d.put("duel.accept-no-arena", "&c{0} 接受了约战，但没有空闲竞技场");
         // 管理：竞技场
         d.put("setup.usage", "&7用法: /pa setup <名字>");
+        d.put("setup.in-use-hint", "&7提示: 该竞技场有进行中的对局，本次修改对下一局生效");
+        d.put("setup.not-bed", "&c请左键点击一张床");
         d.put("setup.lobby-set", "&7已把当前位置设为大厅出生点");
         d.put("setup.kit-hint", "&7kit 为按模式设置: /pa kit <模式> [clear]（对该模式所有竞技场生效）");
         d.put("setup.positions", "&7点位组数: {0}（同图可并发 {0} 场；setspawn/setbed 可带组号）");
@@ -154,6 +162,7 @@ public class Messages {
         d.put("setbuild.need-other", "&7还需要再设置另一个对角点");
         d.put("setbuild.done", "&a可建设区域已生效（矩形框）");
         d.put("guard.usage", "&7用法: /pa guard <名字> ready|clear");
+        d.put("guard.bad-action", "&c参数只能填 ready 或 clear");
         d.put("guard.beds-missing", "&c先设置好第 1 组两队的床（/pa setbed）再记录围床");
         d.put("guard.disabled-hint", "&7提示: 模式 {0} 未启用围床（/pa mode {1} needs-guard true 可开启），记录仍会保存");
         d.put("guard.empty", "&c红队的床周围 {0} 格内没有可记录的方块，先放好防护方块");
@@ -168,7 +177,8 @@ public class Messages {
         d.put("genvoid.success", "&7虚空地图已生成: {0}（两岛位于 {1} 的 X=-{2}/+{2}，Y={3}）");
         d.put("genvoid.hint", "&7出生点与床已自动配置，/pa list 确认就绪即可开玩；记得设置 /pa setlobby");
         d.put("genvoid.teleported", "&7已传送到地图");
-        d.put("kit.usage", "&7用法: /pa kit <模式> [clear]");
+        d.put("kit.usage", "&7用法: /pa kit <模式> [clear|forget <玩家>]");
+        d.put("kit.unknown-mode", "&c未知模式: {0}（可选 {1}）");
         d.put("kit.saved", "&7已把当前背包+盔甲存为 {0} 的 kit");
         d.put("kit.shared", "&7该模式所有竞技场共用此 kit；羊毛/皮革发放时会自动变成队伍颜色");
         d.put("kit.cleared", "&7已清除 {0} 的 kit，恢复默认");
@@ -200,6 +210,7 @@ public class Messages {
         d.put("mode.modify-hint", "&7修改: /pa mode {0} <开关> <true|false>");
         // /world
         d.put("world.help-header", "&b--- 世界管理 ---");
+        d.put("world.create-usage", "&7用法: /world create <名> [void|flat|normal]");
         d.put("world.help-list", "&7/world list 查看所有世界");
         d.put("world.help-create", "&7/world create <名> [void|flat|normal] 创建世界（管理员）");
         d.put("world.help-tp", "&7/world tp <名> 传送到世界");
@@ -257,7 +268,7 @@ public class Messages {
         }
         // 合并：插件升级新增的键补进文件（不覆盖用户已改内容）
         boolean changed = false;
-        for (Map.Entry<String, String> entry : defaults().entrySet()) {
+        for (Map.Entry<String, String> entry : DEFAULTS.entrySet()) {
             if (!cache.containsKey(entry.getKey())) {
                 cache.put(entry.getKey(), entry.getValue());
                 changed = true;
@@ -268,7 +279,7 @@ public class Messages {
 
     public synchronized void save() {
         YamlConfiguration cfg = new YamlConfiguration();
-        cfg.set("prefix", cache.getOrDefault("prefix", defaults().get("prefix")));
+        cfg.set("prefix", cache.getOrDefault("prefix", DEFAULTS.get("prefix")));
         for (Map.Entry<String, String> entry : cache.entrySet()) {
             if (entry.getKey().equals("prefix")) continue;
             cfg.set("messages." + entry.getKey(), entry.getValue());
@@ -282,7 +293,7 @@ public class Messages {
     }
 
     private void writeDefaults() {
-        cache.putAll(defaults());
+        cache.putAll(DEFAULTS);
         save();
     }
 
@@ -290,7 +301,7 @@ public class Messages {
     public String get(String key) {
         String value = cache.get(key);
         if (value != null) return value;
-        return defaults().getOrDefault(key, key);
+        return DEFAULTS.getOrDefault(key, key);
     }
 
     /** 取原始文本（不套占位符），供 BossBar 等旧式 API 使用 */

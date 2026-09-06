@@ -74,8 +74,8 @@ public class GuardSub implements SubCommand {
         }
         if (!CmdUtil.teleportToArenaWorld(plugin, p, arena)) return;
         if (!arena.getType().settings().isNeedsGuard()) {
-            Msg.send(p, "提示: 模式 " + arena.getType().display() + " 未启用围床（/pa mode "
-                    + arena.getType().id() + " needs-guard true 可开启），记录仍会保存");
+            Msg.send(p, "guard.disabled-hint",
+                    arena.getType().display(), arena.getType().id());
         }
         Location head = pos.bedHead(Team.RED);
         int radius = plugin.settings().guardScanRadius();
@@ -91,7 +91,7 @@ public class GuardSub implements SubCommand {
             }
         }
         if (entries.isEmpty()) {
-            Msg.send(p, "guard.empty", String.valueOf(radius));
+            Msg.send(p, "guard.empty", radius);
             return;
         }
         arena.setGuards(entries);
@@ -110,9 +110,9 @@ public class GuardSub implements SubCommand {
             }
         }
         plugin.arenas().saveAll();
-        Msg.send(p, "guard.recorded", String.valueOf(entries.size()));
-        Msg.send(p, "guard.sync", String.valueOf(placed));
-        if (skipped > 0) Msg.send(p, "guard.sync-skipped", "skipped", String.valueOf(skipped));
+        Msg.send(p, "guard.recorded", entries.size());
+        Msg.send(p, "guard.sync", placed);
+        if (skipped > 0) Msg.send(p, "guard.sync-skipped", skipped);
         Msg.send(p, "guard.replay-hint");
     }
 

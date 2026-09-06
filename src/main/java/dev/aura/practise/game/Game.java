@@ -16,7 +16,7 @@ import dev.aura.practise.mode.ModeSettings;
 import dev.aura.practise.manager.KitManager;
 import dev.aura.practise.util.LocUtil;
 import dev.aura.practise.util.Msg;
-import net.kyori.adventure.text.format.NamedTextColor;
+import net.kyori.adventure.text.Component;
 import org.bukkit.Bukkit;
 import org.bukkit.GameMode;
 import org.bukkit.Location;
@@ -174,7 +174,7 @@ public class Game {
         Team team = nextTeam();
         players.put(p.getUniqueId(), team);
         alive.add(p.getUniqueId());
-        broadcast("game.joined", p.getName(), String.valueOf(players.size()), String.valueOf(maxPlayers()));
+        broadcast("game.joined", p.getName(), players.size(), maxPlayers());
         // 排队阶段留在原地（大厅），人齐后再传送；背包清空只保留退出排队染料
         p.setGameMode(GameMode.SURVIVAL);
         clearInventory(p);
@@ -297,7 +297,7 @@ public class Game {
             if (spawn != null) pl.teleport(spawn);
             pl.setFallDistance(0f);
         }
-        broadcast("match.countdown", String.valueOf(countdownSeconds));
+        broadcast("match.countdown", countdownSeconds);
         // 匹配成功：图腾特效（粒子爆发 + 模式图标从头顶升起）
         for (UUID id : players.keySet()) {
             Player pl = Bukkit.getPlayer(id);
@@ -344,11 +344,10 @@ public class Game {
                     for (Player p : onlinePlayers()) {
                         if (matchCountdown) {
                             Msg.title(p, "match.count-title", "match.count-sub",
-                                    "seconds", String.valueOf(countdownSeconds), "mode", mode.display());
+                                    countdownSeconds, mode.display());
                         } else {
                             Msg.title(p, "match.count-title", "match.round-title",
-                                    "seconds", String.valueOf(countdownSeconds),
-                                    "round", String.valueOf(roundsCurrent));
+                                    countdownSeconds, roundsCurrent);
                         }
                         p.playSound(p.getLocation(), Sound.BLOCK_NOTE_BLOCK_PLING, 1f, 1f);
                     }
@@ -582,8 +581,7 @@ public class Game {
                 broadcast("game.draw");
             } else {
                 broadcast("game.round-won",
-                        "team", legacyName(winner), "round", String.valueOf(roundsCurrent),
-                        "red", String.valueOf(red), "blue", String.valueOf(blue));
+                        legacyName(winner), roundsCurrent, red, blue);
             }
             beginRound();
             return;
@@ -608,7 +606,7 @@ public class Game {
             alive.add(id); // 存活玩家的装备由 start() 统一发放；死亡界面的由重生事件处理
         }
         countdownBar = Bukkit.createBossBar(
-                Msg.text("match.round-bar", String.valueOf(roundsCurrent)).replace('&', '§'),
+                Msg.text("match.round-bar", roundsCurrent).replace('&', '§'),
                 org.bukkit.boss.BarColor.YELLOW, org.bukkit.boss.BarStyle.SEGMENTED_10);
         countdownBar.setProgress(1.0);
         updateBarViewers();
@@ -626,12 +624,15 @@ public class Game {
         stopCountdown();
         stopTick();
         removeBar();
-        broadcast(winner == null ? "game.draw" : "game.win",
-                "team", winner == null ? "" : legacyName(winner));
+        if (winner == null) {
+            broadcast("game.draw");
+        } else {
+            broadcast("game.win", legacyName(winner));
+        }
         if (roundsTotal > 1) {
             broadcast("game.score",
-                    "red", String.valueOf(roundWins.getOrDefault(Team.RED, 0)),
-                    "blue", String.valueOf(roundWins.getOrDefault(Team.BLUE, 0)));
+                    roundWins.getOrDefault(Team.RED, 0),
+                    roundWins.getOrDefault(Team.BLUE, 0));
         }
         String mvp = mvpDescription();
         if (mvp != null) broadcast("game.mvp", mvp);
@@ -639,7 +640,7 @@ public class Game {
             Msg.title(p,
                     winner == null ? "game.end-title-draw" : "game.end-title",
                     "game.end-sub",
-                    "team", winner == null ? "" : legacyName(winner));
+                    winner == null ? "" : legacyName(winner));
             p.playSound(p.getLocation(), Sound.ENTITY_PLAYER_LEVELUP, 1f, 1f);
         }
         new BukkitRunnable() {
@@ -734,11 +735,13 @@ public class Game {
     private void voidCheck() {
         int below = plugin.settings().voidBelowSpawn();
         if (below <= 0 || state != GameState.RUNNING || !mode.settings().isVoidKill()) return;
-        for (UUID id : players.keySet()) {
+        ArenaPosition pos = pos(); // 点位整局不变，提出循环
+        for (Map.Entry<UUID, Team> entry : players.entrySet()) {
+            UUID id = entry.getKey();
             if (!alive.contains(id) || ghosts.contains(id)) continue;
             Player p = Bukkit.getPlayer(id);
             if (p == null || !p.isOnline()) continue;
-            double spawnY = pos().spawnY(players.get(id));
+            double spawnY = pos.spawnY(entry.getValue());
             if (Double.isNaN(spawnY)) continue;
             if (p.getLocation().getY() < spawnY - below) {
                 p.setHealth(0.0); // 走正常死亡流程（有床则进入重生等待）
@@ -902,7 +905,7 @@ public class Game {
                     player.playSound(player.getLocation(), Sound.ENTITY_PLAYER_LEVELUP, 0.8f, 1.5f);
                     return;
                 }
-                Msg.title(player, "ghost.wait-title", "ghost.wait-sub", String.valueOf(left));
+                Msg.title(player, "ghost.wait-title", "ghost.wait-sub", left);
                 left--;
             }
         }.runTaskTimer(plugin, 10L, 20L));
@@ -1006,7 +1009,7 @@ public class Game {
         KitManager.Kit current = snapshotInventory(p);
         if (kitEquals(current, given)) return; // 没动过：不记，继续跟随模式 kit（管理员改 kit 能同步）
         plugin.playerKits().record(p.getUniqueId(), mode.id(), current);
-        Msg.send(p, "kit.personal-saved", "mode", mode.display());
+        Msg.send(p, "kit.personal-saved", mode.display());
     }
 
     /** 当前背包（36 格 + 四件盔甲）的完整快照 */
@@ -1183,15 +1186,17 @@ public class Game {
         return out;
     }
 
-    /** 广播一条消息键（含占位符），参与者和观战者都会收到 */
-    public void broadcast(String key, String... replacements) {
+    /** 广播一条消息键（含占位符），参与者和观战者都会收到。
+     *  Component 不可变：整条消息只解析一次（原实现按接收者各解析一遍），复用发给所有人 */
+    public void broadcast(String key, Object... replacements) {
+        Component line = Msg.prefix().append(Msg.component(key, replacements));
         for (Player p : onlinePlayers()) {
-            Msg.send(p, key, replacements);
+            p.sendMessage(line);
         }
         // 观战者也同步收听比赛消息
         for (UUID id : spectators) {
             Player p = Bukkit.getPlayer(id);
-            if (p != null && p.isOnline()) Msg.send(p, key, replacements);
+            if (p != null && p.isOnline()) p.sendMessage(line);
         }
     }
 
@@ -1276,12 +1281,13 @@ public class Game {
 
     private void updateBarViewers() {
         if (countdownBar == null) return;
-        for (Player p : Bukkit.getOnlinePlayers()) {
-            if (players.containsKey(p.getUniqueId())) {
-                countdownBar.addPlayer(p);
-            } else {
-                countdownBar.removePlayer(p);
-            }
+        // 只遍历本局玩家（原来扫全服在线玩家）；再清掉已退局的残留观察者
+        for (UUID id : players.keySet()) {
+            Player p = Bukkit.getPlayer(id);
+            if (p != null && p.isOnline()) countdownBar.addPlayer(p);
+        }
+        for (Player p : countdownBar.getPlayers()) {
+            if (!players.containsKey(p.getUniqueId())) countdownBar.removePlayer(p);
         }
     }
 

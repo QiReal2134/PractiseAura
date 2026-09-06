@@ -4,7 +4,6 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
-import java.util.Comparator;
 import java.util.List;
 import java.util.Random;
 
@@ -125,9 +124,9 @@ public class WorldCommand implements CommandExecutor, TabCompleter {
         Msg.send(sender, "world.list-header");
         for (World world : Bukkit.getWorlds()) {
             Msg.send(sender, "world.list-entry",
-                    "name", world.getName(),
-                    "type", world.getWorldType().name().toLowerCase(),
-                    "players", String.valueOf(world.getPlayers().size()));
+                    world.getName(),
+                    world.getWorldType().name().toLowerCase(),
+                    world.getPlayers().size());
         }
     }
 
@@ -261,26 +260,36 @@ public class WorldCommand implements CommandExecutor, TabCompleter {
         Msg.send(sender, "world.deleted", worldName);
     }
 
-    /** 递归删除文件夹；返回 null 表示彻底删除（或本来就不存在），否则为首个失败原因 */
+    /** 递归删除文件夹（后序遍历、边遍边删，不物化全部路径）；返回 null 表示彻底删除（或本来就不存在），否则为首个失败原因 */
     private static String deleteFolder(Path folder) {
         if (!Files.exists(folder)) return null;
-        List<Path> paths;
+        String[] firstError = {null};
         try {
-            try (var stream = Files.walk(folder)) {
-                paths = stream.sorted(Comparator.reverseOrder()).toList();
-            }
+            Files.walkFileTree(folder, new java.nio.file.SimpleFileVisitor<>() {
+                @Override
+                public java.nio.file.FileVisitResult visitFile(Path file, java.nio.file.attribute.BasicFileAttributes attrs) {
+                    try {
+                        Files.delete(file);
+                    } catch (IOException ex) {
+                        if (firstError[0] == null) firstError[0] = ex.toString();
+                    }
+                    return java.nio.file.FileVisitResult.CONTINUE;
+                }
+
+                @Override
+                public java.nio.file.FileVisitResult postVisitDirectory(Path dir, IOException exc) {
+                    try {
+                        Files.delete(dir);
+                    } catch (IOException ex) {
+                        if (firstError[0] == null) firstError[0] = ex.toString();
+                    }
+                    return java.nio.file.FileVisitResult.CONTINUE;
+                }
+            });
         } catch (Exception ex) {
-            return ex.toString();
+            if (firstError[0] == null) firstError[0] = ex.toString();
         }
-        String firstError = null;
-        for (Path path : paths) {
-            try {
-                Files.delete(path);
-            } catch (IOException ex) {
-                if (firstError == null) firstError = ex.toString();
-            }
-        }
-        return firstError;
+        return firstError[0];
     }
 
     /** 世界是否登记在 worlds.yml 中（即由 /world create 创建的自定义世界） */

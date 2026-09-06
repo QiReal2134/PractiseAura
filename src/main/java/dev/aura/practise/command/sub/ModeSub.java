@@ -72,7 +72,7 @@ public class ModeSub implements SubCommand {
         plugin.getConfig().set("modes." + mode.id().toLowerCase() + "." + flag, v);
         plugin.saveConfig();
         ModeRegistry.refresh(plugin);
-        Msg.send(to, "mode.applied", mode.display(), flag, String.valueOf(v));
+        Msg.send(to, "mode.applied", mode.display(), flag, v);
     }
 
     @Override

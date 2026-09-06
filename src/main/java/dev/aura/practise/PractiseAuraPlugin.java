@@ -50,6 +50,7 @@ public final class PractiseAuraPlugin extends JavaPlugin {
     private GameManager gameManager;
     private dev.aura.practise.manager.KitManager kitManager;
     private dev.aura.practise.manager.PlayerKitManager playerKitManager;
+    private dev.aura.practise.manager.LastModeManager lastModeManager;
     private ScoreboardService boards;
     private LobbyMenu lobbyMenu;
     private Location lobby;
@@ -72,8 +73,11 @@ public final class PractiseAuraPlugin extends JavaPlugin {
         kitManager.load(); // 先加载 kit（竞技场加载时可能做旧版 kit 迁移）
         playerKitManager = new dev.aura.practise.manager.PlayerKitManager(this);
         playerKitManager.load(); // 玩家个人 kit（对局中自动记录）
+        // 延迟落盘：记录只标脏，每 30 秒批量写一次（对局内死亡路径无磁盘 I/O），关服时 onDisable 兜底
+        getServer().getScheduler().runTaskTimer(this, playerKitManager::flushIfDirty, 600L, 600L);
         arenaManager = new ArenaManager(this);
         arenaManager.load();
+        lastModeManager = new dev.aura.practise.manager.LastModeManager();
         lobbyMenu = new LobbyMenu(this);
         boards = new ScoreboardService(this);
         gameManager = new GameManager(this);
@@ -150,6 +154,7 @@ public final class PractiseAuraPlugin extends JavaPlugin {
     @Override
     public void onDisable() {
         if (gameManager != null) gameManager.shutdown();
+        if (playerKitManager != null) playerKitManager.flushIfDirty();
         if (arenaManager != null) arenaManager.saveAll();
         getLogger().info("PractiseAura 已关闭");
     }
@@ -172,6 +177,10 @@ public final class PractiseAuraPlugin extends JavaPlugin {
 
     public LobbyMenu lobbyMenu() {
         return lobbyMenu;
+    }
+
+    public dev.aura.practise.manager.LastModeManager lastModes() {
+        return lastModeManager;
     }
 
     public dev.aura.practise.manager.KitManager kits() {

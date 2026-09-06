@@ -63,7 +63,7 @@ public class SetSpawnSub implements SubCommand {
         }
         arena.position(group).setSpawn(team, p.getLocation());
         plugin.arenas().saveAll();
-        Msg.send(p, "setspawn.success", arena.getName(), String.valueOf(group), team.display());
+        Msg.send(p, "setspawn.success", arena.getName(), group, team.display());
     }
 
     @Override

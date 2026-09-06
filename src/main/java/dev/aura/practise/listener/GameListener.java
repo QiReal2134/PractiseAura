@@ -92,7 +92,7 @@ public class GameListener implements Listener {
         plugin.boards().remove(p);
         plugin.pendingBeds().remove(p.getUniqueId());
         plugin.pendingSettings().remove(p.getUniqueId());
-        plugin.lobbyMenu().forgetLastGame(p.getUniqueId());
+        plugin.lastModes().forget(p.getUniqueId());
         plugin.duelInvites().remove(p.getUniqueId()); // 以该玩家为目标的约战邀请
         plugin.duelCooldowns().remove(p.getUniqueId());
     }
@@ -127,7 +127,7 @@ public class GameListener implements Listener {
         if (game == null || game.state() != GameState.RUNNING || !game.isAlive(victim.getUniqueId())) {
             return;
         }
-        e.deathMessage(Msg.component("game.death-message", "player", victim.getName()));
+        e.deathMessage(Msg.component("game.death-message", victim.getName()));
         game.recordPersonalKit(victim); // 死亡瞬间背包还在（下一 tick 被原版清空），调整过就记为个人 kit
         new BukkitRunnable() {
             @Override
@@ -163,7 +163,7 @@ public class GameListener implements Listener {
                     } else {
                         game.markAlive(p.getUniqueId());
                         game.prepareSpawn(p, team);
-                        Msg.title(p, "ghost.respawn-title", "ghost.respawn-sub", "team", team.legacyName());
+                        Msg.title(p, "ghost.respawn-title", "ghost.respawn-sub");
                     }
                 }
             }.runTaskLater(plugin, 2L);
@@ -286,10 +286,10 @@ public class GameListener implements Listener {
         }
         Player attacker = resolveAttacker(e.getDamager());
         if (attacker == null) return;
+        Game attackerGame = plugin.games().gameOf(attacker.getUniqueId()); // 查一次，后面共用
         // 攻击到人 → 立即结束自己的无敌（保护）时间（无论打的是谁）
-        Game attackerGame0 = plugin.games().gameOf(attacker.getUniqueId());
-        if (attackerGame0 != null && attackerGame0.isProtected(attacker.getUniqueId())) {
-            attackerGame0.breakProtection(attacker.getUniqueId());
+        if (attackerGame != null && attackerGame.isProtected(attacker.getUniqueId())) {
+            attackerGame.breakProtection(attacker.getUniqueId());
         }
         Game victimGame = plugin.games().gameOf(victim.getUniqueId());
         if (victimGame == null) {
@@ -313,7 +313,6 @@ public class GameListener implements Listener {
             victimGame.breakProtection(attacker.getUniqueId()); // 主动进攻打破自己的保护
         }
         if (attacker.equals(victim)) return; // 自己火球的自伤（火球跳）
-        Game attackerGame = plugin.games().gameOf(attacker.getUniqueId());
         if (attackerGame != victimGame) {
             e.setCancelled(true); // 场外玩家打不到场内
             return;
@@ -472,7 +471,7 @@ public class GameListener implements Listener {
                     if (plugin.games().gameOf(p.getUniqueId()) == null) plugin.lobbyMenu().open(p);
                 }
                 case "rejoin" -> {
-                    ModeHandler last = plugin.lobbyMenu().lastGameOf(p.getUniqueId());
+                    ModeHandler last = plugin.lastModes().lastOf(p.getUniqueId());
                     if (last != null && plugin.games().gameOf(p.getUniqueId()) == null) {
                         plugin.games().join(p, last);
                     }
@@ -505,7 +504,7 @@ public class GameListener implements Listener {
     private void consumePendingBed(Player p, PendingBed pending, Block block) {
         Arena arena = plugin.arenas().get(pending.arenaName());
         if (arena == null) {
-            Msg.send(p, "error.arena-missing", "arena", pending.arenaName());
+            Msg.send(p, "error.arena-missing", pending.arenaName());
             return;
         }
         if (!(block.getBlockData() instanceof Bed bed)) {
@@ -517,7 +516,7 @@ public class GameListener implements Listener {
         arena.position(pending.position()).setBed(pending.team(), head.getLocation(), facing);
         plugin.arenas().saveAll();
         plugin.pendingBeds().remove(p.getUniqueId());
-        Msg.send(p, "setbed.done", arena.getName(), String.valueOf(pending.position()), pending.team().display());
+        Msg.send(p, "setbed.done", arena.getName(), pending.position(), pending.team().display());
     }
 
     // ------------------------------------------------------------------
